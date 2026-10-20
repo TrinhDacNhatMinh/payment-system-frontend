@@ -4,6 +4,7 @@
 
 /* Ant Design owns its controls. Tailwind Preflight is intentionally omitted. */
 html {
+  color-scheme: light;
   background: var(--app-canvas);
   color: var(--app-text);
   font-family: var(--app-fontFamily);
@@ -48,7 +49,266 @@ body {
   outline-offset: 3px;
 }
 
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--app-text);
+  font-size: 20px;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.brand-icon {
+  display: inline-flex;
+  padding: 9px;
+  border-radius: 8px;
+  color: var(--app-surface);
+  background: var(--app-primary);
+  font-size: 23px;
+}
+
+.brand:hover {
+  color: var(--app-text);
+}
+
+.auth-layout {
+  box-sizing: border-box;
+  min-height: 100dvh;
+  padding: 56px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 32px;
+}
+
+.auth-layout-embedded {
+  min-height: auto;
+  padding: 0;
+}
+
+.auth-card,
+.content-state {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 28px;
+  border: 1px solid var(--app-border);
+  border-radius: 10px;
+  background: var(--app-surface);
+  box-shadow: 0 1px 3px #10182806;
+  overflow-wrap: anywhere;
+}
+
+.auth-card {
+  max-width: 440px;
+}
+.auth-heading {
+  margin-bottom: 24px;
+}
+.auth-heading h1 {
+  margin: 0;
+  font-size: 26px;
+  line-height: 1.25;
+  letter-spacing: -0.025em;
+}
+.auth-heading p,
+.page-heading p {
+  margin: 8px 0 0;
+  color: var(--app-textSecondary);
+}
+.auth-footer {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--app-border);
+  text-align: center;
+  color: var(--app-textSecondary);
+}
+.auth-footer a {
+  color: var(--app-primaryHover);
+}
+
+.app-shell {
+  --header-height: 80px;
+  --sidebar-width: 240px;
+}
+.app-header {
+  box-sizing: border-box;
+  min-height: var(--header-height);
+  padding: 16px 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  border-bottom: 1px solid var(--app-border);
+  background: var(--app-surface);
+}
+.app-body {
+  display: grid;
+  grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+  min-height: calc(100dvh - var(--header-height));
+}
+.app-sidebar {
+  padding: 28px 16px;
+  border-right: 1px solid var(--app-border);
+  background: var(--app-surface);
+}
+.app-content {
+  min-width: 0;
+  padding: 36px;
+}
+.app-content-inner {
+  max-width: 1160px;
+  margin: 0 auto;
+}
+.account-email {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  margin: 0;
+  color: var(--app-textSecondary);
+}
+.account-controls {
+  max-width: 50%;
+}
+.account-controls button {
+  flex-shrink: 0;
+}
+.navigation-item {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 44px;
+  padding: 12px 16px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--app-textSecondary);
+  font: inherit;
+  font-weight: 500;
+  text-align: left;
+  text-decoration: none;
+}
+.navigation-item:hover {
+  color: var(--app-primaryHover);
+  background: var(--app-infoBackground);
+}
+.navigation-item-active {
+  background: var(--app-infoBackground);
+  color: var(--app-primaryHover);
+  font-weight: 600;
+}
+.navigation-item-unavailable {
+  cursor: not-allowed;
+}
+.navigation-item-unavailable:hover {
+  background: transparent;
+  color: var(--app-textSecondary);
+}
+.navigation-note {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 400;
+}
+.menu-trigger {
+  min-width: 44px;
+  min-height: 44px;
+}
+.navigation-drawer-close {
+  min-width: 44px;
+  min-height: 44px;
+}
+.navigation-drawer-footer button {
+  min-height: 44px;
+}
+.page-heading {
+  margin-bottom: 28px;
+  overflow-wrap: anywhere;
+}
+.page-heading h1 {
+  margin: 0;
+  font-size: 30px;
+  line-height: 1.25;
+  letter-spacing: -0.025em;
+}
+.content-state h2 {
+  margin: 0;
+  font-size: 20px;
+}
+.content-state p {
+  margin: 0;
+  color: var(--app-textSecondary);
+}
+.skip-link {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: 1100;
+  padding: 12px;
+  background: var(--app-surface);
+  color: var(--app-primaryHover);
+  transform: translateY(-200%);
+}
+.skip-link:focus {
+  transform: translateY(0);
+}
+.app-shell :focus-visible,
+.auth-layout :focus-visible {
+  outline: 3px solid var(--app-focus);
+  outline-offset: 3px;
+}
+
+@media (max-width: 1000px) {
+  .app-shell {
+    --sidebar-width: 200px;
+  }
+  .app-content {
+    padding: 28px 24px;
+  }
+}
+
 @media (max-width: 700px) {
+  .app-shell {
+    --header-height: 72px;
+  }
+  .app-header {
+    padding: 12px 16px;
+    gap: 12px;
+  }
+  .app-header .brand {
+    font-size: 18px;
+  }
+  .app-header .brand-icon {
+    padding: 7px;
+    font-size: 20px;
+  }
+  .app-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .app-content {
+    padding: 28px 16px;
+  }
+  .auth-layout {
+    padding: 28px 16px;
+    gap: 28px;
+  }
+  .auth-layout-embedded {
+    padding: 0;
+  }
+  .auth-card,
+  .content-state {
+    padding: 24px;
+  }
+  .auth-heading h1,
+  .page-heading h1 {
+    font-size: 24px;
+  }
+  .auth-layout button,
+  .drawer-content button {
+    min-height: 44px;
+  }
   .scaffold-page {
     padding: 28px 16px;
   }

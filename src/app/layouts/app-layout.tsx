@@ -1,0 +1,104 @@
+import { useRef, useState, type PropsWithChildren } from 'react';
+import { CloseOutlined, LogoutOutlined, MenuOutlined } from '@ant-design/icons';
+import { useLocation } from '@tanstack/react-router';
+import { Button, Drawer } from 'antd';
+
+import { useMediaQuery } from '@/shared/lib/use-media-query';
+import { Brand } from '@/shared/ui/brand';
+import { AppNavigation } from './app-navigation';
+
+type AppLayoutProps = PropsWithChildren<
+  | { account?: undefined; onSignOut?: never; signingOut?: never }
+  | { account: { email: string }; onSignOut: () => void; signingOut?: boolean }
+>;
+
+// Keep this aligned with the <=700px layout breakpoint in styles.css.
+const MOBILE_QUERY = '(max-width: 700px)';
+
+export function AppLayout({ account, onSignOut, signingOut = false, children }: AppLayoutProps) {
+  const mobile = useMediaQuery(MOBILE_QUERY);
+  const locationKey = useLocation({ select: (location) => location.href });
+  const [openedAt, setOpenedAt] = useState<string | null>(null);
+  const menuTrigger = useRef<HTMLButtonElement>(null);
+  const drawerOpen = mobile && openedAt === locationKey;
+
+  // Discard open state on navigation or crossing to desktop; resizing back
+  // must not unexpectedly reopen the modal or retain its body scroll lock.
+  if (openedAt !== null && (!mobile || openedAt !== locationKey)) {
+    setOpenedAt(null);
+  }
+
+  const signOutControl = account && (
+    <Button
+      htmlType="button"
+      icon={<LogoutOutlined aria-hidden="true" />}
+      loading={signingOut}
+      onClick={onSignOut}
+    >
+      Sign out
+    </Button>
+  );
+
+  return (
+    <div className="app-shell">
+      <a href="#main-content" className="skip-link">
+        Skip to content
+      </a>
+      <header className="app-header">
+        <div className="flex items-center gap-3 min-w-0">
+          {mobile && (
+            <Button
+              ref={menuTrigger}
+              className="menu-trigger"
+              htmlType="button"
+              icon={<MenuOutlined />}
+              aria-label="Open menu"
+              aria-expanded={drawerOpen}
+              aria-haspopup="dialog"
+              onClick={() => setOpenedAt(locationKey)}
+            />
+          )}
+          <Brand />
+        </div>
+        {!mobile && account && (
+          <div className="account-controls flex items-center gap-5 min-w-0">
+            <span className="account-email">{account.email}</span>
+            {signOutControl}
+          </div>
+        )}
+      </header>
+      <div className="app-body">
+        {!mobile && (
+          <aside className="app-sidebar">
+            <AppNavigation />
+          </aside>
+        )}
+        <main id="main-content" className="app-content" tabIndex={-1}>
+          <div className="app-content-inner">{children}</div>
+        </main>
+      </div>
+      <Drawer
+        title="Navigation"
+        closable={{ closeIcon: <CloseOutlined aria-label="Close menu" /> }}
+        classNames={{ close: 'navigation-drawer-close', footer: 'navigation-drawer-footer' }}
+        placement="left"
+        size="min(320px, 86vw)"
+        open={drawerOpen}
+        keyboard
+        mask={{ closable: true }}
+        focusable={{ trap: true, focusTriggerAfterClose: true }}
+        destroyOnHidden
+        onClose={() => setOpenedAt(null)}
+        afterOpenChange={(open) => {
+          if (!open && mobile) menuTrigger.current?.focus();
+        }}
+        footer={account ? signOutControl : undefined}
+      >
+        <div className="drawer-content flex flex-col gap-6">
+          {account && <p className="account-email">{account.email}</p>}
+          <AppNavigation onNavigate={() => setOpenedAt(null)} />
+        </div>
+      </Drawer>
+    </div>
+  );
+}

@@ -4,16 +4,27 @@ React + TypeScript + Vite, managed with pnpm. English UI, VND wallet.
 
 ## Current status
 
-I1-03 source/configuration scaffold is prepared. Dependency installation,
-lockfile creation, route generation and command verification are pending.
+I1-03 dependencies, lockfile and generated routes are present. The user reported
+successful type checking, 11 environment tests and a production build before
+I1-04. I1-04 layout/navigation source and component tests are now prepared;
+checks for these new changes and browser review are pending.
 This is not an integrated authentication application.
 
 - Router: file-based TanStack Router; `/` redirects to `/wallet`.
 - `/login` and `/register` are placeholders until I1-06.
-- `/wallet` keeps its URL and displays the sign-in placeholder. The parent
+- `/wallet` keeps its URL and displays the app shell with the sign-in placeholder. The parent
   deliberately has no `Outlet`, private loader or API call until I1-07/08.
-- Query provider, Ant Design English locale/theme and Tailwind build plugin
-  are configured. Detailed responsive layouts belong to I1-04.
+- AuthLayout/AppLayout use the approved v3 colors, typography and layout:
+  240px/200px sidebar, 80px desktop header, 72px mobile header, 440px auth card.
+  At <=700px navigation moves into a keyboard-accessible Drawer. Its open state
+  clears on navigation and when moving to desktop; Escape closes it and focus
+  returns to the trigger. Account email/sign-out are only shown when supplied
+  by a future verified session; the current guest route supplies neither.
+- Wallet is the only enabled navigation destination; Transfer, Top up and
+  Transactions are explicitly unavailable until their iterations. No balance,
+  transactions or authenticated demo session are fabricated.
+- `shared/ui/content-state.tsx` provides loading, empty, error and warning states
+  for later session/query integration; `PageHeading` provides page typography.
 - Axios, TanStack Form and Zod are declared; API/auth adapters belong to
   I1-05–09. No token storage, refresh timer or cookie handling exists yet.
 - Vitest/Testing Library are configured; environment validation has unit
@@ -22,8 +33,8 @@ This is not an integrated authentication application.
 ## Prerequisites
 
 Use Node **24.22.0** and pnpm **10.32.1**, matching `.node-version` and
-`package.json`. The current workstation's Node 22.16.0 does not meet this
-configuration. Do not silently change the machine's global Node installation.
+`package.json`. The user confirmed both versions after installing Node on
+20 October 2026. Do not silently change the machine's global Node installation.
 
 The repository's [command boundary](../docs/agents/boundary.md#5-tools-commands-and-data)
 requires explicit permission before installation, validation or server startup.
@@ -74,7 +85,20 @@ pnpm build
 `build` includes route generation and TypeScript checking before Vite builds.
 Playwright requires a running app, browser binaries and actual specifications;
 `pnpm test:e2e` is reserved for the later browser scenarios.
-No checks above have been run for this scaffold yet.
+The user supplied successful I1-03 typecheck/unit/build output. This does not
+validate subsequent I1-04 changes, whose checks have not been run yet.
+
+## Layout review
+
+After authorizing startup, inspect `/login`, `/register` and `/wallet` at
+1440px, 1001px, 1000px, 701px, 700px, 390px and 320px. Confirm no page overflow,
+readable headings, visible keyboard focus and unavailable navigation items.
+On mobile open the menu, use Tab/Shift+Tab, close with Escape, and verify focus
+returns to Open menu. Open it again, resize to desktop and back: it must stay
+closed without retaining a page scroll lock. `/wallet` must keep its URL,
+show the sign-in area and never show account data or a wallet balance.
+Forms, validation and submit behavior remain I1-06; this step builds their
+layout without adding inactive credential inputs or simulated success.
 
 ## Structure and styling
 

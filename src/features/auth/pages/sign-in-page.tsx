@@ -1,13 +1,22 @@
 import { Link } from '@tanstack/react-router';
-import { Typography } from 'antd';
+import { Alert } from 'antd';
 
-import { RoutePlaceholder } from '@/shared/ui/route-placeholder';
+import { AuthLayout } from '@/app/layouts/auth-layout';
 
-export function SignInPage() {
+export function SignInPage({ embedded = false }: { embedded?: boolean }) {
   return (
-    <RoutePlaceholder title="Sign in">
-      <Typography.Paragraph>Sign in is not available yet.</Typography.Paragraph>
-      <Link to="/register">Create account</Link>
-    </RoutePlaceholder>
+    <AuthLayout
+      title="Sign in"
+      description="Access your wallet and transactions."
+      embedded={embedded}
+      footer={
+        <>
+          Don’t have an account? <Link to="/register">Create account</Link>
+        </>
+      }
+    >
+      {embedded && <Alert type="info" showIcon title="Sign in to continue on this page." />}
+      <Alert type="warning" showIcon title="Sign in is not available yet." />
+    </AuthLayout>
   );
 }

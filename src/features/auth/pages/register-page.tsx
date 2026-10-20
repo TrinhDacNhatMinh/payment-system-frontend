@@ -1,13 +1,20 @@
 import { Link } from '@tanstack/react-router';
-import { Typography } from 'antd';
+import { Alert } from 'antd';
 
-import { RoutePlaceholder } from '@/shared/ui/route-placeholder';
+import { AuthLayout } from '@/app/layouts/auth-layout';
 
 export function RegisterPage() {
   return (
-    <RoutePlaceholder title="Create account">
-      <Typography.Paragraph>Registration is not available yet.</Typography.Paragraph>
-      <Link to="/login">Back to sign in</Link>
-    </RoutePlaceholder>
+    <AuthLayout
+      title="Create account"
+      description="Create your account to start using your VND wallet."
+      footer={
+        <>
+          Already have an account? <Link to="/login">Sign in</Link>
+        </>
+      }
+    >
+      <Alert type="warning" showIcon title="Registration is not available yet." />
+    </AuthLayout>
   );
 }
