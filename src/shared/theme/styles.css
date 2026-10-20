@@ -103,6 +103,52 @@ body {
 .auth-card {
   max-width: 440px;
 }
+
+.auth-fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.auth-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+}
+.auth-field label {
+  font-weight: 500;
+}
+.auth-required,
+.auth-field-error {
+  color: var(--app-error);
+}
+.auth-field-error,
+.auth-field-hint {
+  margin: 0;
+  font-size: 12px;
+}
+.auth-field-hint {
+  color: var(--app-textSecondary);
+}
+.auth-primary-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-height: 44px;
+  padding: 10px 18px;
+  border-radius: 6px;
+  background: var(--app-primary);
+  color: var(--app-surface);
+  font-weight: 600;
+  text-align: center;
+  text-decoration: none;
+}
+.auth-primary-link:hover {
+  background: var(--app-primaryHover);
+  color: var(--app-surface);
+}
 .auth-heading {
   margin-bottom: 24px;
 }
