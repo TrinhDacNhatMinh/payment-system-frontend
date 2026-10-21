@@ -1,18 +1,27 @@
-import { Link } from '@tanstack/react-router';
-import { Card } from 'antd';
-
+import { useAuthSession } from '@/features/auth/model/session-context';
+import { ContentState } from '@/shared/ui/content-state';
 import { PageHeading } from '@/shared/ui/page-heading';
+import { TransferBalance } from '../ui/transfer-balance';
+import { TransferForm } from '../ui/transfer-form';
 
 export function TransferPage() {
+  const session = useAuthSession();
+  const access = session?.controller.getAccessIdentity();
+  if (!access || !session?.privateApi)
+    return <ContentState kind="loading" title="Checking your session…" />;
   return (
     <div className="transfer-panel">
       <PageHeading title="Transfer" />
-      <Card>
-        <p>Transfers are not available yet.</p>
-        <Link to="/wallet" preload={false}>
-          Back to wallet
-        </Link>
-      </Card>
+      <TransferForm
+        key={`${access.epoch}:${access.user.id}:${access.user.role}`}
+        balance={
+          <TransferBalance
+            session={session.controller}
+            access={access}
+            api={session.privateApi(access)}
+          />
+        }
+      />
     </div>
   );
 }

@@ -78,17 +78,20 @@ afterEach(async () => {
 
 describe('wallet page with session-bound API', () => {
   it('opens the transfer shell from the wallet without sending a money request', async () => {
-    const fixture = renderWallet([successReply(wallet)]);
+    const fixture = renderWallet([successReply(wallet), successReply(wallet)]);
     await screen.findByLabelText('Available balance: 12,000 VND');
     await userEvent.setup().click(screen.getByRole('link', { name: 'Transfer' }));
     await screen.findByRole('heading', { name: 'Transfer' });
     expect(fixture.router.state.location.pathname).toBe('/transfer');
-    expect(screen.getByText('Transfers are not available yet.')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Back to wallet' })).toHaveAttribute('href', '/wallet');
+    expect(screen.getByRole('form', { name: 'Transfer details' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Go back' })).toHaveAttribute('href', '/wallet');
     expect(screen.queryByRole('button', { name: /Confirm transfer/ })).not.toBeInTheDocument();
+    await screen.findByLabelText('Available balance: 12,000 VND');
+    await waitFor(() => expect(fixture.adapter).toHaveBeenCalledTimes(4));
     expect(fixture.adapter.mock.calls.map(([config]) => config.url)).toEqual([
       '/api/v1/auth/csrf',
       '/api/v1/auth/refresh',
+      '/api/v1/wallet/me',
       '/api/v1/wallet/me',
     ]);
   });

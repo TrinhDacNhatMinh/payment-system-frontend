@@ -391,6 +391,131 @@ body {
   min-height: 160px;
 }
 
+.transfer-panel {
+  max-width: 560px;
+}
+.transfer-balance {
+  margin-bottom: 24px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--app-border);
+}
+.transfer-balance p {
+  margin: 0;
+  color: var(--app-textSecondary);
+}
+.transfer-balance output {
+  display: block;
+  margin-top: 8px;
+  font-size: clamp(20px, 4vw, 28px);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.transfer-balance output span {
+  font-size: 0.65em;
+  color: var(--app-textSecondary);
+}
+.transfer-balance .transfer-balance-feedback {
+  margin-top: 8px;
+}
+.transfer-fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.transfer-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+}
+.transfer-field label {
+  font-weight: 500;
+}
+.transfer-control,
+.transfer-actions button {
+  min-height: 44px;
+}
+.transfer-field-error,
+.transfer-field-hint {
+  margin: 0;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.transfer-field-error {
+  color: var(--app-error);
+}
+.transfer-field-hint {
+  color: var(--app-textSecondary);
+}
+.transfer-review h2 {
+  margin: 0 0 24px;
+  font-size: 20px;
+}
+.transfer-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  margin: 0 0 24px;
+}
+.transfer-summary > div {
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr);
+  gap: 16px;
+}
+.transfer-summary dt {
+  color: var(--app-textSecondary);
+}
+.transfer-summary dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.transfer-review-amount {
+  font-size: 24px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.transfer-description {
+  white-space: pre-wrap;
+}
+.transfer-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 24px;
+}
+.transfer-actions > * {
+  min-width: 0;
+}
+.transfer-actions button {
+  height: auto;
+  white-space: normal;
+}
+.transfer-entry-actions {
+  margin-top: 0;
+}
+.transfer-back-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-height: 44px;
+  padding: 8px 16px;
+  border: 1px solid var(--app-border);
+  border-radius: 6px;
+  color: var(--app-text);
+  text-decoration: none;
+}
+.transfer-back-action:hover {
+  border-color: var(--app-primaryHover);
+  color: var(--app-primaryHover);
+}
+
 @media (max-width: 1000px) {
   .app-shell {
     --sidebar-width: 200px;
@@ -401,6 +526,10 @@ body {
 }
 
 @media (max-width: 700px) {
+  .transfer-summary > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+  }
   .app-shell {
     --header-height: 72px;
   }

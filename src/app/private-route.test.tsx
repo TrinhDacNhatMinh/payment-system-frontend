@@ -142,9 +142,22 @@ describe('protected route and loader integration', () => {
   });
 
   it('opens transfer after login at the same URL and hides it on cross-tab sign out', async () => {
-    const fixture = createSessionFixture([csrfReply(), successReply(testSession)], {
-      initial: { version: 1, epoch: '10000000-0000-4000-8000-000000000001', mode: 'signed-out' },
-    });
+    const fixture = createSessionFixture(
+      [
+        csrfReply(),
+        successReply(testSession),
+        successReply({
+          id: 7,
+          userId: testSession.user.id,
+          balance: 1000000,
+          currency: 'VND',
+          updatedAt: '2026-10-21T14:30:00.123456',
+        }),
+      ],
+      {
+        initial: { version: 1, epoch: '10000000-0000-4000-8000-000000000001', mode: 'signed-out' },
+      },
+    );
     const { router, privateLoader } = renderPrivateApp(fixture, undefined, '/transfer');
     await screen.findByRole('heading', { name: 'Sign in' });
     fireEvent.change(screen.getByLabelText(/^Email address/), {
@@ -153,13 +166,25 @@ describe('protected route and loader integration', () => {
     fireEvent.change(screen.getByLabelText(/^Password/), { target: { value: 'secret' } });
     await userEvent.setup().click(screen.getByRole('button', { name: 'Sign in' }));
     await screen.findByRole('heading', { name: 'Transfer' });
+    await screen.findByLabelText('Available balance: 1,000,000 VND');
     expect(router.state.location.pathname).toBe('/transfer');
     expect(privateLoader).not.toHaveBeenCalled();
     expect(fixture.adapter.mock.calls.map(([config]) => config.url)).toEqual([
       '/api/v1/auth/csrf',
       '/api/v1/auth/login',
+      '/api/v1/wallet/me',
     ]);
     expect(screen.queryByRole('button', { name: /Confirm transfer/ })).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/^Recipient email/), {
+      target: { value: 'recipient@example.com' },
+    });
+    fireEvent.change(screen.getByLabelText(/^Amount/), { target: { value: '1000' } });
+    fireEvent.change(screen.getByLabelText(/^Description/), {
+      target: { value: 'private transfer draft' },
+    });
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Continue' }));
+    await screen.findByRole('heading', { name: 'Review transfer' });
 
     const otherTab = fixture.hub.connect();
     await act(() =>
@@ -167,8 +192,10 @@ describe('protected route and loader integration', () => {
     );
     await screen.findByRole('heading', { name: 'Sign in' });
     expect(screen.queryByRole('heading', { name: 'Transfer' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Review transfer' })).not.toBeInTheDocument();
+    expect(screen.queryByText('private transfer draft')).not.toBeInTheDocument();
     expect(router.state.location.pathname).toBe('/transfer');
-    expect(fixture.adapter).toHaveBeenCalledTimes(2);
+    expect(fixture.adapter).toHaveBeenCalledTimes(3);
   });
 
   it('hides the private page and draft before logout completes and preserves its URL', async () => {
