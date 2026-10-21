@@ -6,6 +6,7 @@ import { AuthLayout } from '@/app/layouts/auth-layout';
 import { useAuthFormActions } from '../model/auth-form-actions';
 import { getAuthReturnTo } from '../model/auth-navigation';
 import { AuthForm } from '../ui/auth-form';
+import { SessionNotice } from '../ui/session-notice';
 
 export function RegisterPage() {
   const actions = useAuthFormActions();
@@ -38,6 +39,7 @@ export function RegisterPage() {
         </>
       }
     >
+      <SessionNotice />
       <AuthForm
         mode="register"
         submit={

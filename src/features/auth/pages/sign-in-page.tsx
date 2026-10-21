@@ -5,6 +5,7 @@ import { AuthLayout } from '@/app/layouts/auth-layout';
 import { useAuthFormActions } from '../model/auth-form-actions';
 import { getAuthReturnTo } from '../model/auth-navigation';
 import { AuthForm } from '../ui/auth-form';
+import { SessionNotice } from '../ui/session-notice';
 
 export function SignInPage({ embedded = false }: { embedded?: boolean }) {
   const actions = useAuthFormActions();
@@ -27,6 +28,7 @@ export function SignInPage({ embedded = false }: { embedded?: boolean }) {
       }
     >
       {embedded && <Alert type="info" showIcon title="Sign in to continue on this page." />}
+      {!embedded && <SessionNotice />}
       <AuthForm
         mode="login"
         submit={

@@ -14,8 +14,9 @@ import {
 type AuthOperation = 'register' | 'login' | 'refresh' | 'logout';
 type AuthPhase = 'lock' | 'csrf' | 'submit';
 
-// The I1-07 session controller supplies the cross-tab Web Lock and epoch check.
-// It must not already hold the same lock when invoking these operations.
+// The session controller supplies real cross-tab coordination. A runner may
+// acquire the lock or execute inside its already-held scope; never request the
+// same Web Lock recursively, and never use an unlocked production fallback.
 export type WithAuthLock = <T>(operation: () => Promise<T>) => Promise<T>;
 
 export class AuthRequestError extends ApiError {

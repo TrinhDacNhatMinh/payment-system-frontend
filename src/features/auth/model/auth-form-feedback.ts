@@ -3,6 +3,14 @@ import { AuthRequestError } from '../api/auth-api';
 
 export function getAuthFormFeedback(error: unknown, mode: 'login' | 'register') {
   const failure = normalizeApiError(error);
+  if (mode === 'login' && error instanceof AuthRequestError && error.operation === 'logout') {
+    return {
+      type: 'warning' as const,
+      title: 'Session cleanup not confirmed',
+      description: 'Sign in again to retry session cleanup before starting a new sign-in.',
+      uncertain: false,
+    };
+  }
   const beforeSubmit = error instanceof AuthRequestError && error.phase !== 'submit';
   const uncertain =
     !beforeSubmit &&
