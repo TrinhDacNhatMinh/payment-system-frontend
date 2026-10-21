@@ -1,7 +1,7 @@
 import { useRef, useState, type PropsWithChildren } from 'react';
 import { CloseOutlined, LogoutOutlined, MenuOutlined } from '@ant-design/icons';
 import { useLocation } from '@tanstack/react-router';
-import { Button, Drawer } from 'antd';
+import { Button, Drawer, Modal } from 'antd';
 
 import { useMediaQuery } from '@/shared/lib/use-media-query';
 import { Brand } from '@/shared/ui/brand';
@@ -19,8 +19,22 @@ export function AppLayout({ account, onSignOut, signingOut = false, children }: 
   const mobile = useMediaQuery(MOBILE_QUERY);
   const locationKey = useLocation({ select: (location) => location.href });
   const [openedAt, setOpenedAt] = useState<string | null>(null);
+  const [signOutPrompt, setSignOutPrompt] = useState<{
+    email: string;
+    locationKey: string;
+  } | null>(null);
   const menuTrigger = useRef<HTMLButtonElement>(null);
   const drawerOpen = mobile && openedAt === locationKey;
+  const confirmationOpen =
+    signOutPrompt !== null &&
+    signOutPrompt.email === account?.email &&
+    signOutPrompt.locationKey === locationKey &&
+    !!onSignOut &&
+    !signingOut;
+
+  if (signOutPrompt !== null && !confirmationOpen) {
+    setSignOutPrompt(null);
+  }
 
   // Discard open state on navigation or crossing to desktop; resizing back
   // must not unexpectedly reopen the modal or retain its body scroll lock.
@@ -33,7 +47,7 @@ export function AppLayout({ account, onSignOut, signingOut = false, children }: 
       htmlType="button"
       icon={<LogoutOutlined aria-hidden="true" />}
       loading={signingOut}
-      onClick={onSignOut}
+      onClick={() => setSignOutPrompt({ email: account.email, locationKey })}
     >
       Sign out
     </Button>
@@ -84,9 +98,9 @@ export function AppLayout({ account, onSignOut, signingOut = false, children }: 
         placement="left"
         size="min(320px, 86vw)"
         open={drawerOpen}
-        keyboard
+        keyboard={!confirmationOpen}
         mask={{ closable: true }}
-        focusable={{ trap: true, focusTriggerAfterClose: true }}
+        focusable={{ trap: !confirmationOpen, focusTriggerAfterClose: true }}
         destroyOnHidden
         onClose={() => setOpenedAt(null)}
         afterOpenChange={(open) => {
@@ -99,6 +113,25 @@ export function AppLayout({ account, onSignOut, signingOut = false, children }: 
           <AppNavigation onNavigate={() => setOpenedAt(null)} />
         </div>
       </Drawer>
+      <Modal
+        title="Sign out?"
+        open={confirmationOpen}
+        okText="Sign out"
+        cancelText="Cancel"
+        keyboard
+        mask={{ closable: false }}
+        focusable={{ trap: true, focusTriggerAfterClose: true }}
+        destroyOnHidden
+        onCancel={() => setSignOutPrompt(null)}
+        onOk={() => {
+          if (!confirmationOpen) return;
+          setSignOutPrompt(null);
+          setOpenedAt(null);
+          onSignOut?.();
+        }}
+      >
+        <p>Are you sure you want to sign out?</p>
+      </Modal>
     </div>
   );
 }

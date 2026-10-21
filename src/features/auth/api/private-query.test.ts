@@ -2,7 +2,7 @@ import { QueryClient } from '@tanstack/react-query';
 import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
-import { successReply } from '@/test/api-adapter';
+import { errorReply, successReply } from '@/test/api-adapter';
 import { createSessionFixture, csrfReply, testSession } from '@/test/auth-session';
 import { requireSessionAccess } from '../model/session-access';
 import type { SessionController } from '../model/session-controller';
@@ -16,6 +16,44 @@ afterEach(async () => {
 });
 
 describe('private query scope', () => {
+  it('clears cached data and blocks the old query scope even when logout fails', async () => {
+    const client = new QueryClient();
+    clients.push(client);
+    const fixture = createSessionFixture(
+      [
+        csrfReply(),
+        successReply(testSession),
+        successReply({ value: 1 }),
+        csrfReply(),
+        errorReply('INTERNAL_SERVER_ERROR', 500),
+      ],
+      {
+        clearPrivateData: () => {
+          void client.cancelQueries();
+          client.clear();
+        },
+      },
+    );
+    controllers.push(fixture.controller);
+    fixture.controller.start();
+    const access = await requireSessionAccess(fixture.controller);
+    const query = privateQueryOptions({
+      session: fixture.controller,
+      access,
+      api: fixture.privateApi(access),
+      key: ['wallet'],
+      request: { path: '/api/v1/wallets/me' },
+      schema: z.object({ value: z.number() }),
+    });
+    await client.fetchQuery(query);
+    const logout = fixture.controller.logout();
+    expect(client.getQueryData(query.queryKey)).toBeUndefined();
+    await logout;
+    expect(fixture.controller.getSnapshot().status).toBe('logout-pending');
+    await expect(client.fetchQuery(query)).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+    expect(fixture.adapter).toHaveBeenCalledTimes(5);
+  });
+
   it('partitions the cache by epoch/user/role and denies stale fetchQuery calls', async () => {
     const client = new QueryClient();
     clients.push(client);

@@ -9,13 +9,15 @@ import { SignedOutPage } from './signed-out-page';
 
 export function ProtectedRouteError({ error }: ErrorComponentProps) {
   const session = useAuthSession();
-  if (
-    error instanceof SessionAccessError &&
-    error.denied &&
-    session?.controller.getAccessIdentity()
-  ) {
+  const access = session?.controller.getAccessIdentity();
+  if (error instanceof SessionAccessError && error.denied && access && session) {
     return (
-      <AppLayout>
+      <AppLayout
+        account={{ email: access.user.email }}
+        onSignOut={() => {
+          void session.controller.logout();
+        }}
+      >
         <ContentState
           kind="error"
           title="Access denied"

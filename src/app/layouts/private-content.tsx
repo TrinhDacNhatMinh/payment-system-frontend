@@ -13,7 +13,12 @@ export function PrivateContent({ access, children }: PropsWithChildren<{ access:
   if (!session || !sameAccess(session.controller.getAccessIdentity(), access))
     return <SignedOutPage />;
   return (
-    <AppLayout account={{ email: access.user.email }}>
+    <AppLayout
+      account={{ email: access.user.email }}
+      onSignOut={() => {
+        void session.controller.logout();
+      }}
+    >
       {pending ? (
         <ContentState kind="loading" title="Loading your page…" />
       ) : (

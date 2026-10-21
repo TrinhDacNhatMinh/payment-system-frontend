@@ -19,7 +19,7 @@ type SignedOutStatus =
   | 'connection-error'
   | 'unsupported';
 export type SessionState = { available: boolean } & (
-  | { status: 'restoring' | 'signing-in'; epoch: string | null }
+  | { status: 'restoring' | 'signing-in' | 'signing-out'; epoch: string | null }
   | { status: 'authenticated'; epoch: string; user: AuthSession['user']; expiresAt: number }
   | { status: SignedOutStatus; epoch: string | null; message: string }
 );
@@ -29,7 +29,7 @@ type Job = {
   generation: number;
   epoch: string | null;
   submitted: boolean;
-  kind: 'login' | 'register' | 'refresh';
+  kind: 'login' | 'register' | 'refresh' | 'logout';
   previousUserId: number | null;
   previousRole: AuthSession['user']['role'] | null;
 };
@@ -63,6 +63,7 @@ export function createSessionController(dependencies: SessionDependencies) {
   let timer: ReturnType<typeof setTimeout> | null = null;
   let expiryTimer: ReturnType<typeof setTimeout> | null = null;
   let refreshFlight: Promise<void> | null = null;
+  let logoutFlight: { job: Job; promise: Promise<void> } | null = null;
   let stopBarrier: Promise<void> | null = null;
   let cleanupFailed = false;
   let running = false;
@@ -90,9 +91,10 @@ export function createSessionController(dependencies: SessionDependencies) {
     clearPrivateData();
     if (abortJobs)
       for (const job of jobs) {
-        // An explicit login whose intent is still waiting for the control lock
-        // must not be cancelled by the older epoch it is about to replace.
-        if (job.kind !== 'login' || job.epoch !== null) job.abort.abort();
+        // Pending explicit intents must not be cancelled by the older epoch
+        // they are about to replace under the short control lock.
+        if ((job.kind !== 'login' && job.kind !== 'logout') || job.epoch !== null)
+          job.abort.abort();
       }
   }
 
@@ -117,7 +119,7 @@ export function createSessionController(dependencies: SessionDependencies) {
       available: true,
       message:
         mode === 'logout-pending'
-          ? 'Sign-out has not been confirmed by the server. Sign in to complete session cleanup.'
+          ? 'Sign-out has not been confirmed by the server. Try again, or sign in to complete session cleanup.'
           : mode === 'refresh-uncertain'
             ? 'Your session could not be confirmed. Please sign in again.'
             : 'Please sign in to continue.',
@@ -217,6 +219,18 @@ export function createSessionController(dependencies: SessionDependencies) {
     if (!running) return;
     try {
       const latest = coordination.read();
+      // Do not restore an older marker while the local sign-out intent is
+      // still waiting to publish. Its control-lock callback will read latest.
+      if (
+        [...jobs].some(
+          (job) =>
+            job.kind === 'logout' &&
+            job.epoch === null &&
+            job.generation === generation &&
+            !job.abort.signal.aborted,
+        )
+      )
+        return;
       if (
         isControl(latest) &&
         isControl(observed) &&
@@ -395,7 +409,8 @@ export function createSessionController(dependencies: SessionDependencies) {
       !running ||
       job.generation !== generation ||
       job.abort.signal.aborted ||
-      state.status === 'signing-in'
+      state.status === 'signing-in' ||
+      state.status === 'signing-out'
     )
       return;
     const control = coordination.read();
@@ -413,7 +428,13 @@ export function createSessionController(dependencies: SessionDependencies) {
   }
 
   function restore(rejectedAccessToken?: string): Promise<void> {
-    if (!running || !state.available || state.status === 'signing-in') return Promise.resolve();
+    if (
+      !running ||
+      !state.available ||
+      state.status === 'signing-in' ||
+      state.status === 'signing-out'
+    )
+      return Promise.resolve();
     if (refreshFlight) return refreshFlight;
     const { job, release } = newJob('refresh');
     const work = restoreUnderLock(job, async (api) => {
@@ -478,6 +499,104 @@ export function createSessionController(dependencies: SessionDependencies) {
     if (!running || state.status !== 'authenticated') return;
     if (now() >= refreshAt || !getAccessToken()) void restore();
     else planRefresh();
+  }
+
+  function logout(): Promise<void> {
+    if (!running || !state.available) return Promise.resolve();
+    if (
+      logoutFlight &&
+      logoutFlight.job.generation === generation &&
+      !logoutFlight.job.abort.signal.aborted &&
+      (logoutFlight.job.epoch === null || logoutFlight.job.epoch === state.epoch)
+    ) {
+      return logoutFlight.promise;
+    }
+    if (state.status === 'anonymous') return Promise.resolve();
+    const { job, release } = newJob('logout');
+    const work = (async () => {
+      try {
+        const epoch = coordination.newEpoch();
+        // Hide private content synchronously, before waiting for either lock.
+        for (const other of jobs) if (other !== job) other.abort.abort();
+        clearMemory(true);
+        refreshFlight = null;
+        emit({ status: 'signing-out', epoch, available: true });
+        const intent = await coordination.change(() =>
+          running && job.generation === generation && !job.abort.signal.aborted
+            ? { version: 1, epoch, mode: 'logout-pending' }
+            : null,
+        );
+        if (!intent || !running || job.generation !== generation || job.abort.signal.aborted)
+          return;
+        job.epoch = intent.epoch;
+        if (!current(job, 'logout-pending')) {
+          onControlChange();
+          return;
+        }
+        observed = intent;
+        hasObservedControl = true;
+        await underAuthLock(job, async (api) => {
+          if (!current(job, 'logout-pending')) {
+            onControlChange();
+            return;
+          }
+          // No bearer token or preceding refresh is needed for idempotent logout.
+          await api.logout(job.abort.signal);
+          if (!current(job, 'logout-pending')) {
+            onControlChange();
+            return;
+          }
+          const confirmed = await coordination.change((control) =>
+            running &&
+            job.generation === generation &&
+            !job.abort.signal.aborted &&
+            isControl(control) &&
+            control.epoch === job.epoch &&
+            control.mode === 'logout-pending'
+              ? { ...control, mode: 'signed-out' }
+              : null,
+          );
+          if (!confirmed || !current(job, 'signed-out')) return;
+          observed = confirmed;
+          clearMemory();
+          emit({
+            status: 'anonymous',
+            epoch: confirmed.epoch,
+            available: true,
+            message: 'You are signed out. Please sign in to continue.',
+          });
+        });
+      } catch (error) {
+        if (error instanceof CoordinationUnavailableError) {
+          if (running && job.generation === generation && !job.abort.signal.aborted) unsupported();
+          return;
+        }
+        if (!running || job.generation !== generation || job.abort.signal.aborted) return;
+        if (job.epoch === null) {
+          unsupported();
+          return;
+        }
+        try {
+          if (current(job, 'logout-pending')) {
+            clearMemory();
+            emit({
+              status: 'logout-pending',
+              epoch: job.epoch,
+              available: true,
+              message: `Sign-out could not be confirmed. ${normalizeApiError(error).message}`,
+            });
+          } else onControlChange();
+        } catch {
+          unsupported();
+        }
+      } finally {
+        release();
+      }
+    })().finally(() => {
+      if (logoutFlight?.job === job) logoutFlight = null;
+    });
+    logoutFlight = { job, promise: work };
+    return work;
   }
 
   async function login(values: LoginRequest, signal: AbortSignal) {
@@ -686,6 +805,7 @@ export function createSessionController(dependencies: SessionDependencies) {
     getAccessIdentity,
     isCurrentEpoch,
     login,
+    logout,
     register,
     getSnapshot: () => state,
     subscribe: (listener: () => void) => {

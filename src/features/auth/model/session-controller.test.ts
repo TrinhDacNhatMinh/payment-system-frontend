@@ -379,6 +379,325 @@ describe('explicit login and registration', () => {
   });
 });
 
+describe('explicit logout', () => {
+  it('supersedes an older login still waiting to publish its intent', async () => {
+    const hub = createSessionCoordinationHub(active);
+    const { controller, adapter } = setup(
+      [csrf(), successReply(session), csrf(), successReply()],
+      hub.connect(),
+    );
+    controller.start();
+    await controller.restore();
+    const login = controller.login(credentials, new AbortController().signal);
+    const cancelled = expect(login).rejects.toMatchObject({ kind: 'cancelled' });
+    await controller.logout();
+    await cancelled;
+    expect(controller.getSnapshot().status).toBe('anonymous');
+    expect(hub.read()).toMatchObject({ mode: 'signed-out' });
+    expect(
+      adapter.mock.calls.filter(([config]) => config.url === '/api/v1/auth/login'),
+    ).toHaveLength(0);
+  });
+
+  it('allows an explicitly requested logout after the account is locked', async () => {
+    const hub = createSessionCoordinationHub(active);
+    const { controller, adapter } = setup(
+      [csrf(), errorReply('ACCOUNT_LOCKED', 403), csrf(), successReply()],
+      hub.connect(),
+    );
+    controller.start();
+    await controller.restore();
+    expect(controller.getSnapshot().status).toBe('locked');
+    await controller.logout();
+    expect(controller.getSnapshot().status).toBe('anonymous');
+    expect(adapter.mock.calls[3]?.[0].url).toBe('/api/v1/auth/logout');
+  });
+
+  it('fails closed locally if the logout marker cannot be persisted', async () => {
+    const hub = createSessionCoordinationHub(active);
+    const connection = hub.connect();
+    let unavailable = false;
+    const coordination: SessionCoordination = {
+      ...connection,
+      change: (update) => {
+        if (unavailable) return Promise.reject(new CoordinationUnavailableError());
+        return connection.change(update);
+      },
+    };
+    const { controller, adapter, clearPrivateData } = setup(
+      [csrf(), successReply(session)],
+      coordination,
+    );
+    controller.start();
+    await controller.restore();
+    clearPrivateData.mockClear();
+    unavailable = true;
+    await controller.logout();
+    expect(controller.getSnapshot()).toMatchObject({ status: 'unsupported', available: false });
+    expect(controller.getAccessToken()).toBeNull();
+    expect(clearPrivateData).toHaveBeenCalled();
+    expect(adapter).toHaveBeenCalledTimes(2);
+  });
+
+  it('clears local state immediately, single-flights clicks and confirms sign-out without refresh', async () => {
+    const hub = createSessionCoordinationHub(active);
+    const { controller, adapter, clearPrivateData } = setup(
+      [csrf(), successReply(session), csrf(), successReply(null)],
+      hub.connect(),
+    );
+    controller.start();
+    await controller.restore();
+    clearPrivateData.mockClear();
+    const signOut = controller.logout();
+    expect(controller.logout()).toBe(signOut);
+    expect(controller.getSnapshot().status).toBe('signing-out');
+    expect(controller.getAccessToken()).toBeNull();
+    expect(clearPrivateData).toHaveBeenCalled();
+    await signOut;
+    expect(controller.getSnapshot().status).toBe('anonymous');
+    expect(hub.read()).toMatchObject({ mode: 'signed-out' });
+    expect(adapter.mock.calls.map(([config]) => config.url)).toEqual([
+      '/api/v1/auth/csrf',
+      '/api/v1/auth/refresh',
+      '/api/v1/auth/csrf',
+      '/api/v1/auth/logout',
+    ]);
+    expect(adapter.mock.calls[3]?.[0].withCredentials).toBe(true);
+    expect(adapter.mock.calls[3]?.[0].headers.get('Authorization')).toBeUndefined();
+    expect(adapter.mock.calls[3]?.[0].headers.get('X-XSRF-TOKEN')).toBe('masked-csrf');
+    expect(adapter.mock.calls[3]?.[0].data).toBe('{}');
+    await vi.advanceTimersByTimeAsync(200_000);
+    await controller.restore();
+    await controller.logout();
+    expect(adapter).toHaveBeenCalledTimes(4);
+  });
+
+  it.each([
+    errorReply('INTERNAL_SERVER_ERROR', 500),
+    errorReply('ORIGIN_NOT_ALLOWED', 403),
+    errorReply('AUTH_SESSION_BUSY', 409),
+    new AxiosError('offline', 'ERR_NETWORK'),
+    new AxiosError('timeout', 'ECONNABORTED'),
+  ])('keeps pending state and blocks reload after an unconfirmed logout', async (failure) => {
+    const hub = createSessionCoordinationHub(active);
+    const { controller, adapter } = setup(
+      [csrf(), successReply(session), csrf(), failure],
+      hub.connect(),
+    );
+    controller.start();
+    await controller.restore();
+    await controller.logout();
+    expect(controller.getSnapshot().status).toBe('logout-pending');
+    expect(hub.read()).toMatchObject({ mode: 'logout-pending' });
+    expect(controller.getAccessToken()).toBeNull();
+    await vi.advanceTimersByTimeAsync(200_000);
+    expect(adapter).toHaveBeenCalledTimes(4);
+    const reloaded = setup([], hub.connect());
+    reloaded.controller.start();
+    await reloaded.controller.restore();
+    expect(reloaded.controller.getSnapshot().status).toBe('logout-pending');
+    expect(reloaded.adapter).not.toHaveBeenCalled();
+  });
+
+  it('retries only on user action with a new CSRF token after pre-submit failure', async () => {
+    const hub = createSessionCoordinationHub(active);
+    const { controller, adapter } = setup(
+      [
+        csrf(),
+        successReply(session),
+        new AxiosError('offline', 'ERR_NETWORK'),
+        csrf(),
+        successReply(),
+      ],
+      hub.connect(),
+    );
+    controller.start();
+    await controller.restore();
+    await controller.logout();
+    expect(controller.getSnapshot().status).toBe('logout-pending');
+    expect(adapter).toHaveBeenCalledTimes(3);
+    await controller.logout();
+    expect(controller.getSnapshot().status).toBe('anonymous');
+    expect(hub.read()).toMatchObject({ mode: 'signed-out' });
+    expect(
+      adapter.mock.calls.filter(([config]) => config.url === '/api/v1/auth/logout'),
+    ).toHaveLength(1);
+    expect(
+      adapter.mock.calls.filter(([config]) => config.url === '/api/v1/auth/refresh'),
+    ).toHaveLength(1);
+  });
+
+  it('allows a reloaded pending tab to retry without an access token', async () => {
+    const hub = createSessionCoordinationHub({ ...active, mode: 'logout-pending' });
+    const { controller, adapter } = setup([csrf(), successReply()], hub.connect());
+    controller.start();
+    await controller.logout();
+    expect(controller.getSnapshot().status).toBe('anonymous');
+    expect(adapter.mock.calls.map(([config]) => config.url)).toEqual([
+      '/api/v1/auth/csrf',
+      '/api/v1/auth/logout',
+    ]);
+  });
+
+  it('bounds CSRF repair and leaves pending after repeated CSRF rejection', async () => {
+    const hub = createSessionCoordinationHub({ ...active, mode: 'logout-pending' });
+    const { controller, adapter } = setup(
+      [
+        csrf(),
+        errorReply('CSRF_TOKEN_INVALID', 403),
+        csrf(),
+        errorReply('CSRF_TOKEN_INVALID', 403),
+      ],
+      hub.connect(),
+    );
+    controller.start();
+    await controller.logout();
+    expect(controller.getSnapshot().status).toBe('logout-pending');
+    await vi.advanceTimersByTimeAsync(200_000);
+    expect(adapter).toHaveBeenCalledTimes(4);
+  });
+
+  it('clears both tabs and their timers when one tab signs out', async () => {
+    const hub = createSessionCoordinationHub(active);
+    const first = setup([csrf(), successReply(session), csrf(), successReply()], hub.connect());
+    const second = setup([csrf(), successReply(session)], hub.connect());
+    first.controller.start();
+    second.controller.start();
+    await Promise.all([first.controller.restore(), second.controller.restore()]);
+    second.clearPrivateData.mockClear();
+    await first.controller.logout();
+    await vi.waitFor(() => expect(second.controller.getSnapshot().status).toBe('anonymous'));
+    expect(first.controller.getAccessToken()).toBeNull();
+    expect(second.controller.getAccessToken()).toBeNull();
+    expect(second.clearPrivateData).toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(200_000);
+    expect(first.adapter).toHaveBeenCalledTimes(4);
+    expect(second.adapter).toHaveBeenCalledTimes(2);
+  });
+
+  it('blocks restoration immediately while logout waits for an older refresh lock', async () => {
+    const hub = createSessionCoordinationHub(active);
+    let release: () => void = () => undefined;
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let refreshCount = 0;
+    const base = createApiAdapter([
+      csrf(),
+      successReply(session),
+      csrf(),
+      successReply({ ...session, accessToken: 'old-refresh' }),
+      csrf(),
+      successReply(),
+    ]);
+    const delayed: AxiosAdapter = async (config) => {
+      if (config.url === '/api/v1/auth/refresh' && ++refreshCount === 2) await pending;
+      return base(config);
+    };
+    const { controller } = setup([], hub.connect(), delayed);
+    controller.start();
+    await controller.restore();
+    vi.setSystemTime(Date.now() + 91_000);
+    const refreshing = controller.restore();
+    await vi.waitFor(() => expect(refreshCount).toBe(2));
+    const signingOut = controller.logout();
+    try {
+      await vi.waitFor(() => expect(hub.read()).toMatchObject({ mode: 'logout-pending' }));
+      expect(controller.getSnapshot().status).toBe('signing-out');
+      expect(controller.getAccessToken()).toBeNull();
+      await controller.restore();
+      const freshTab = setup([], hub.connect());
+      freshTab.controller.start();
+      await freshTab.controller.restore();
+      expect(freshTab.adapter).not.toHaveBeenCalled();
+    } finally {
+      release();
+    }
+    await Promise.all([refreshing, signingOut]);
+    expect(controller.getSnapshot().status).toBe('anonymous');
+    expect(controller.getAccessToken()).toBeNull();
+    expect(base).toHaveBeenCalledTimes(6);
+  });
+
+  it.each([successReply(), errorReply('INTERNAL_SERVER_ERROR', 500)])(
+    'ignores a stale logout response after a newer login intent',
+    async (oldReply) => {
+      const hub = createSessionCoordinationHub(active);
+      const connection = hub.connect();
+      const silent = { ...connection, subscribe: () => () => undefined };
+      let release: () => void = () => undefined;
+      const pending = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let logoutStarted = false;
+      const base = createApiAdapter([csrf(), successReply(session), csrf(), oldReply]);
+      const delayed: AxiosAdapter = async (config) => {
+        if (config.url === '/api/v1/auth/logout') {
+          logoutStarted = true;
+          await pending;
+        }
+        return base(config);
+      };
+      const oldTab = setup([], silent, delayed).controller;
+      oldTab.start();
+      await oldTab.restore();
+      const oldLogout = oldTab.logout();
+      await vi.waitFor(() => expect(logoutStarted).toBe(true));
+      const logoutEpoch = oldTab.getSnapshot().epoch;
+      const newer = setup(
+        [csrf(), successReply(), csrf(), successReply({ ...session, accessToken: 'new-access' })],
+        hub.connect(),
+      );
+      newer.controller.start();
+      const login = newer.controller.login(credentials, new AbortController().signal);
+      try {
+        await vi.waitFor(() => expect(hub.read()).not.toMatchObject({ epoch: logoutEpoch }));
+      } finally {
+        release();
+      }
+      await Promise.all([oldLogout, login]);
+      expect(hub.read()).toMatchObject({ mode: 'active' });
+      expect(newer.controller.getAccessToken()).toBe('new-access');
+      expect(oldTab.getAccessToken()).toBeNull();
+      expect(base).toHaveBeenCalledTimes(4);
+    },
+  );
+
+  it('retains pending across unmount and ignores the aborted response after remount', async () => {
+    const hub = createSessionCoordinationHub(active);
+    let release: () => void = () => undefined;
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let submitted = false;
+    const base = createApiAdapter([csrf(), successReply(session), csrf(), successReply()]);
+    const delayed: AxiosAdapter = async (config) => {
+      if (config.url === '/api/v1/auth/logout') {
+        submitted = true;
+        await pending;
+      }
+      return base(config);
+    };
+    const { controller } = setup([], hub.connect(), delayed);
+    controller.start();
+    await controller.restore();
+    const loggingOut = controller.logout();
+    try {
+      await vi.waitFor(() => expect(submitted).toBe(true));
+      await controller.stop();
+      controller.start();
+      await controller.restore();
+      expect(controller.getSnapshot().status).toBe('logout-pending');
+      expect(hub.read()).toMatchObject({ mode: 'logout-pending' });
+    } finally {
+      release();
+    }
+    await loggingOut;
+    expect(controller.getSnapshot().status).toBe('logout-pending');
+    expect(base).toHaveBeenCalledTimes(4);
+  });
+});
+
 describe('cross-tab and lifecycle races', () => {
   it('hides expired access while a slow proactive refresh is still pending', async () => {
     const hub = createSessionCoordinationHub(active);

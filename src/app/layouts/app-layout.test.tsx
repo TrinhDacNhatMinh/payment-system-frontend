@@ -19,6 +19,9 @@ let viewportWidth = 390;
 let mediaQueries: Map<string, MediaQueryList>;
 
 beforeEach(() => {
+  // rc-util returns the same ID for every dialog in test mode. Development
+  // mode uses React IDs, preserving accessible names for drawer + modal.
+  vi.stubEnv('NODE_ENV', 'development');
   viewportWidth = 390;
   mediaQueries = new Map();
   vi.stubGlobal(
@@ -46,7 +49,10 @@ beforeEach(() => {
   );
 });
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
+});
 
 function resizeViewport(width: number) {
   act(() => {
@@ -118,7 +124,7 @@ describe('application navigation', () => {
     expect(screen.queryByText('Available balance')).not.toBeInTheDocument();
   });
 
-  it('shows the provided account in the mobile drawer and delegates sign out', async () => {
+  it('shows the mobile account and delegates sign out only after confirmation', async () => {
     const user = userEvent.setup();
     const onSignOut = vi.fn();
     await renderLayout(() => (
@@ -131,6 +137,56 @@ describe('application navigation', () => {
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByText('member@example.com')).toBeInTheDocument();
     await user.click(within(dialog).getByRole('button', { name: 'Sign out' }));
+    const confirmation = await screen.findByRole('dialog', { name: 'Sign out?' });
+    expect(onSignOut).not.toHaveBeenCalled();
+    await user.click(within(confirmation).getByRole('button', { name: 'Sign out' }));
+    expect(onSignOut).toHaveBeenCalledOnce();
+  });
+
+  it('cancels mobile sign out with Escape while keeping the account menu open', async () => {
+    const user = userEvent.setup();
+    const onSignOut = vi.fn();
+    await renderLayout(() => (
+      <AppLayout account={{ email: 'member@example.com' }} onSignOut={onSignOut}>
+        <h1>Page content</h1>
+      </AppLayout>
+    ));
+    await user.click(await screen.findByRole('button', { name: 'Open menu' }));
+    const menu = await screen.findByRole('dialog', { name: 'Navigation' });
+    const trigger = within(menu).getByRole('button', { name: 'Sign out' });
+    await user.click(trigger);
+    await screen.findByRole('dialog', { name: 'Sign out?' });
+    await user.keyboard('{Escape}');
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Sign out?' })).not.toBeInTheDocument(),
+    );
+    expect(screen.getByRole('dialog', { name: 'Navigation' })).toBeInTheDocument();
+    expect(onSignOut).not.toHaveBeenCalled();
+    await waitFor(() => expect(trigger).toHaveFocus());
+  });
+
+  it('keeps desktop content after Cancel and allows confirming a later sign out', async () => {
+    viewportWidth = 1200;
+    const user = userEvent.setup();
+    const onSignOut = vi.fn();
+    await renderLayout(() => (
+      <AppLayout account={{ email: 'member@example.com' }} onSignOut={onSignOut}>
+        <h1>Page content</h1>
+      </AppLayout>
+    ));
+    const trigger = await screen.findByRole('button', { name: 'Sign out' });
+    await user.click(trigger);
+    let confirmation = await screen.findByRole('dialog', { name: 'Sign out?' });
+    await user.click(within(confirmation).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Sign out?' })).not.toBeInTheDocument(),
+    );
+    expect(onSignOut).not.toHaveBeenCalled();
+    expect(screen.getByRole('heading', { name: 'Page content' })).toBeInTheDocument();
+    await waitFor(() => expect(trigger).toHaveFocus());
+    await user.click(trigger);
+    confirmation = await screen.findByRole('dialog', { name: 'Sign out?' });
+    await user.click(within(confirmation).getByRole('button', { name: 'Sign out' }));
     expect(onSignOut).toHaveBeenCalledOnce();
   });
 });
