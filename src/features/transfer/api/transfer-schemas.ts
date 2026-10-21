@@ -2,10 +2,21 @@ import { z } from 'zod';
 
 import { ApiError } from '@/shared/api/api-error';
 import { apiIdSchema, vietnamDateTimeSchema } from '@/shared/api/scalar-schemas';
-import { isVndDecimal, MIN_TRANSFER_MINOR_UNITS, parseVndMinorUnits } from '@/shared/lib/vnd';
+import {
+  isVndDecimal,
+  isWholeVnd,
+  MIN_TRANSFER_MINOR_UNITS,
+  parseVndMinorUnits,
+} from '@/shared/lib/vnd';
 
 const emailSchema = z.string().email().max(255);
 const descriptionSchema = z.string().max(255).nullable();
+const MAX_TRANSFER_MINOR_UNITS = 5_000_000_000n;
+
+// Historical payloads and receipts keep their original amount and balance.
+const storedAmountSchema = z
+  .string()
+  .refine((value) => isVndDecimal(value) && parseVndMinorUnits(value) >= MIN_TRANSFER_MINOR_UNITS);
 
 export const idempotencyKeySchema = z
   .string()
@@ -14,9 +25,13 @@ export const idempotencyKeySchema = z
 
 export const transferAmountSchema = z
   .string()
-  .refine((value) => isVndDecimal(value) && parseVndMinorUnits(value) >= MIN_TRANSFER_MINOR_UNITS, {
-    message: 'Enter an amount from 1,000 to 9,999,999,999,999,999.99 VND with at most 2 decimals.',
-  });
+  .refine(
+    (value) =>
+      isWholeVnd(value) &&
+      parseVndMinorUnits(value) >= MIN_TRANSFER_MINOR_UNITS &&
+      parseVndMinorUnits(value) <= MAX_TRANSFER_MINOR_UNITS,
+    { message: 'Enter a whole VND amount from 1,000 to 50,000,000.' },
+  );
 
 // Input normalization happens before review/dispatch. No description trimming,
 // number coercion, lowercasing of email or rounding of money is allowed.
@@ -30,14 +45,14 @@ export const transferRequestSchema = z
 
 const canonicalRequestSchema = z.object({
   toEmail: emailSchema,
-  amount: transferAmountSchema,
+  amount: storedAmountSchema,
   description: descriptionSchema,
 });
 
 export const transferResponseSchema = z.object({
   transactionId: apiIdSchema,
   fromWalletBalance: z.string().refine(isVndDecimal),
-  amount: transferAmountSchema,
+  amount: storedAmountSchema,
   status: z.literal('SUCCESS'),
   createdAt: vietnamDateTimeSchema,
 });
@@ -71,6 +86,7 @@ const rejectionSchema = z
 const lookupFields = {
   idempotencyKey: idempotencyKeySchema,
   request: canonicalRequestSchema,
+  legacyFractional: z.boolean(),
 };
 
 export const transferLookupSchema = z
@@ -94,6 +110,19 @@ export const transferLookupSchema = z
       error: rejectionSchema,
     }),
   ])
+  .refine(
+    (lookup) => {
+      const values = [lookup.request.amount];
+      if (lookup.state === 'SUCCEEDED') {
+        values.push(lookup.result.amount, lookup.result.fromWalletBalance);
+      }
+      if (!values.every(isVndDecimal)) return false;
+      return (
+        lookup.legacyFractional === values.some((value) => parseVndMinorUnits(value) % 100n !== 0n)
+      );
+    },
+    { message: 'The legacy money flag does not match the stored values.' },
+  )
   .refine(
     (lookup) =>
       lookup.state !== 'SUCCEEDED' ||

@@ -9,19 +9,18 @@ import {
 } from './transfer-schemas';
 
 const key = '550e8400-e29b-41d4-a716-446655440000';
-const request = { toEmail: 'Recipient@example.com', amount: '1000.50', description: null };
+const request = { toEmail: 'Recipient@example.com', amount: '1000', description: null };
 const receipt = {
   transactionId: 1,
-  fromWalletBalance: '0.00',
-  amount: '1000.50',
+  fromWalletBalance: '0',
+  amount: '1000',
   status: 'SUCCESS',
   createdAt: '2026-10-21T14:30:00.123456',
 };
 
 describe('transfer runtime contract', () => {
-  it.each(['1000', '1000.5', '1000.50', '9999999999999999.99'])(
-    'accepts exact amount %s',
-    (amount) => expect(transferAmountSchema.parse(amount)).toBe(amount),
+  it.each(['1000', '1001', '49999999', '50000000'])('accepts exact amount %s', (amount) =>
+    expect(transferAmountSchema.parse(amount)).toBe(amount),
   );
 
   it.each([
@@ -29,6 +28,11 @@ describe('transfer runtime contract', () => {
     1000.5,
     null,
     '999.99',
+    '999',
+    '50000001',
+    '9999999999999999',
+    '1000.00',
+    '1000.50',
     '0',
     '10000000000000000',
     '1000.001',
@@ -67,6 +71,25 @@ describe('transfer runtime contract', () => {
     );
   });
 
+  it.each(['50000001', '9999999999999999.99', '1000.50'])(
+    'reads historical receipt and lookup amount %s without applying new input limits',
+    (amount) => {
+      const result = { ...receipt, amount, fromWalletBalance: '9999999999999999' };
+      expect(transferResponseSchema.parse(result)).toEqual(result);
+      expect(
+        transferLookupSchema.safeParse({
+          idempotencyKey: key,
+          request: { ...request, amount },
+          state: 'SUCCEEDED',
+          result,
+          error: null,
+          legacyFractional: amount.includes('.'),
+        }).success,
+      ).toBe(true);
+      expect(transferAmountSchema.safeParse(amount).success).toBe(false);
+    },
+  );
+
   it('accepts zero receipt balance and preserves Vietnam local time including microseconds', () => {
     expect(transferResponseSchema.parse(receipt)).toEqual(receipt);
     expect(transferResponseSchema.safeParse({ ...receipt, fromWalletBalance: 0 }).success).toBe(
@@ -97,7 +120,14 @@ describe('transfer runtime contract', () => {
   });
 
   it('requires a coherent lookup state and matching amount, without leaking server text', () => {
-    const pending = { idempotencyKey: key, request, state: 'PENDING', result: null, error: null };
+    const pending = {
+      idempotencyKey: key,
+      request,
+      state: 'PENDING',
+      result: null,
+      error: null,
+      legacyFractional: false,
+    };
     expect(transferLookupSchema.parse(pending)).toEqual(pending);
     expect(transferLookupSchema.safeParse({ ...pending, result: receipt }).success).toBe(false);
     const success = { ...pending, state: 'SUCCEEDED', result: receipt };
@@ -133,5 +163,38 @@ describe('transfer runtime contract', () => {
       }).success,
     ).toBe(false);
     expect(transferLookupSchema.safeParse({ ...pending, state: 'FAILED' }).success).toBe(false);
+  });
+
+  it('requires the legacy flag to reflect fractional request or receipt values', () => {
+    const lookup = {
+      idempotencyKey: key,
+      request,
+      state: 'SUCCEEDED',
+      result: receipt,
+      error: null,
+      legacyFractional: false,
+    };
+    expect(transferLookupSchema.safeParse({ ...lookup, legacyFractional: undefined }).success).toBe(
+      false,
+    );
+    expect(transferLookupSchema.safeParse({ ...lookup, legacyFractional: true }).success).toBe(
+      false,
+    );
+    const fractional = { ...lookup, result: { ...receipt, fromWalletBalance: '0.50' } };
+    expect(transferLookupSchema.safeParse(fractional).success).toBe(false);
+    expect(
+      transferLookupSchema.parse({ ...fractional, legacyFractional: true }).result,
+    ).toMatchObject({
+      fromWalletBalance: '0.50',
+    });
+    const pending = {
+      ...lookup,
+      state: 'PENDING',
+      result: null,
+      request: { ...request, amount: '1000.50' },
+      legacyFractional: true,
+    };
+    expect(transferLookupSchema.parse(pending).request.amount).toBe('1000.50');
+    expect(transferRequestSchema.safeParse(pending.request).success).toBe(false);
   });
 });

@@ -8,15 +8,22 @@ import { createSessionFixture, csrfReply, testSession } from '@/test/auth-sessio
 import { createTransferApi } from './transfer-api';
 
 const key = '550e8400-e29b-41d4-a716-446655440000';
-const request = { toEmail: 'Recipient@example.com', amount: '1000.50', description: '  lunch  ' };
+const request = { toEmail: 'Recipient@example.com', amount: '1000', description: '  lunch  ' };
 const receipt = {
   transactionId: 9,
-  fromWalletBalance: '0.00',
-  amount: '1000.50',
+  fromWalletBalance: '0',
+  amount: '1000',
   status: 'SUCCESS',
   createdAt: '2026-10-21T14:30:00.123456',
 };
-const pending = { idempotencyKey: key, state: 'PENDING', request, result: null, error: null };
+const pending = {
+  idempotencyKey: key,
+  state: 'PENDING',
+  request,
+  result: null,
+  error: null,
+  legacyFractional: false,
+};
 const controllers: SessionController[] = [];
 
 async function setup(replies: ApiReply[], adapter?: AxiosAdapter) {
@@ -51,7 +58,7 @@ describe('transfer and lookup adapters', () => {
   });
 
   it('preserves the maximum amount on the wire and in a receipt', async () => {
-    const amount = '9999999999999999.99';
+    const amount = '50000000';
     const { api, adapter } = await setup([successReply({ ...receipt, amount })]);
     await expect(api.submit({ ...request, amount }, key)).resolves.toMatchObject({ amount });
     expect(adapter.mock.calls[2]?.[0].data).toBe(JSON.stringify({ ...request, amount }));
@@ -62,6 +69,9 @@ describe('transfer and lookup adapters', () => {
     await expect(api.submit(request, '../auth/logout')).rejects.toMatchObject({ kind: 'client' });
     await expect(api.getRequest(`${key}?token=secret`)).rejects.toMatchObject({ kind: 'client' });
     await expect(api.submit({ ...request, amount: '1000.001' }, key)).rejects.toMatchObject({
+      kind: 'client',
+    });
+    await expect(api.submit({ ...request, amount: '50000001' }, key)).rejects.toMatchObject({
       kind: 'client',
     });
     await expect(
@@ -77,6 +87,7 @@ describe('transfer and lookup adapters', () => {
     ['IDEMPOTENCY_KEY_REUSED', 409],
     ['TRANSFER_IN_PROGRESS', 409],
     ['CONCURRENT_MODIFICATION', 409],
+    ['LEGACY_FRACTIONAL_MONEY', 409],
     ['INTERNAL_SERVER_ERROR', 500],
   ] as const)(
     'does not refresh, replay or look up automatically after %s',
@@ -153,6 +164,26 @@ describe('transfer and lookup adapters', () => {
       message: expect.stringContaining('does not confirm'),
     });
     expect(adapter).toHaveBeenCalledTimes(4);
+  });
+
+  it('reads exact legacy money but blocks submitting the historical fractional payload', async () => {
+    const historicalRequest = { ...request, amount: '1000.50' };
+    const historicalReceipt = { ...receipt, amount: '1000.50', fromWalletBalance: '0.25' };
+    const { api, adapter } = await setup([
+      successReply({
+        ...pending,
+        state: 'SUCCEEDED',
+        request: historicalRequest,
+        result: historicalReceipt,
+        legacyFractional: true,
+      }),
+    ]);
+    await expect(api.getRequest(key)).resolves.toMatchObject({
+      result: historicalReceipt,
+      legacyFractional: true,
+    });
+    await expect(api.submit(historicalRequest, key)).rejects.toMatchObject({ kind: 'client' });
+    expect(adapter).toHaveBeenCalledTimes(3);
   });
 
   it('retains the private read policy of one refresh and retry for expired lookup auth', async () => {

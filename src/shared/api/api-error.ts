@@ -21,6 +21,8 @@ const codeMessages: Record<string, string> = {
   RECIPIENT_NOT_FOUND: 'The recipient could not be found. Check the email address.',
   RECIPIENT_LOCKED: 'The recipient account is locked and cannot receive this transfer.',
   AMOUNT_OUT_OF_RANGE: 'Check the transfer amount and allowed limits.',
+  LEGACY_FRACTIONAL_MONEY:
+    'A historical fractional amount requires reconciliation. Contact support before continuing.',
   CONCURRENT_MODIFICATION: 'The wallet changed during processing. Check the transfer status.',
   IDEMPOTENCY_KEY_INVALID: 'The transfer key is invalid. No new transfer should be submitted.',
   IDEMPOTENCY_KEY_REUSED: 'This transfer key belongs to different transfer details.',
