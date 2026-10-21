@@ -1,8 +1,7 @@
 import { useAuthSession } from '@/features/auth/model/session-context';
 import { ContentState } from '@/shared/ui/content-state';
 import { PageHeading } from '@/shared/ui/page-heading';
-import { TransferBalance } from '../ui/transfer-balance';
-import { TransferForm } from '../ui/transfer-form';
+import { TransferFlow } from '../ui/transfer-flow';
 
 export function TransferPage() {
   const session = useAuthSession();
@@ -12,15 +11,11 @@ export function TransferPage() {
   return (
     <div className="transfer-panel">
       <PageHeading title="Transfer" />
-      <TransferForm
+      <TransferFlow
         key={`${access.epoch}:${access.user.id}:${access.user.role}`}
-        balance={
-          <TransferBalance
-            session={session.controller}
-            access={access}
-            api={session.privateApi(access)}
-          />
-        }
+        session={session.controller}
+        access={access}
+        privateApi={session.privateApi}
       />
     </div>
   );

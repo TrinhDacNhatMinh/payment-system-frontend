@@ -57,7 +57,7 @@ export const transferResponseSchema = z.object({
   createdAt: vietnamDateTimeSchema,
 });
 
-const rejectionStatus = {
+export const TRANSFER_REJECTION_STATUS = {
   SELF_TRANSFER_NOT_ALLOWED: 400,
   RECIPIENT_NOT_FOUND: 404,
   RECIPIENT_LOCKED: 400,
@@ -77,7 +77,7 @@ const rejectionSchema = z
     ]),
     message: z.string(),
   })
-  .refine((error) => error.httpStatus === rejectionStatus[error.code])
+  .refine((error) => error.httpStatus === TRANSFER_REJECTION_STATUS[error.code])
   .transform((error) => ({
     ...error,
     message: new ApiError('business', { status: error.httpStatus, code: error.code }).message,

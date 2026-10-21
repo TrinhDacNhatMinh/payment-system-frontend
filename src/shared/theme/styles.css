@@ -516,6 +516,43 @@ body {
   color: var(--app-primaryHover);
 }
 
+.transfer-receipt-header {
+  margin-bottom: 28px;
+  text-align: center;
+}
+.transfer-receipt-icon {
+  color: var(--app-success);
+  font-size: 48px;
+}
+.transfer-receipt-header h2 {
+  margin: 16px 0 8px;
+  font-size: 20px;
+}
+.transfer-receipt-amount {
+  margin: 0;
+  font-size: clamp(24px, 5vw, 36px);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.transfer-receipt .transfer-summary {
+  padding-block: 24px;
+  border-top: 1px solid var(--app-border);
+  border-bottom: 1px solid var(--app-border);
+}
+.transfer-receipt .transfer-actions {
+  grid-template-columns: minmax(0, 1fr);
+}
+.transfer-receipt .transfer-back-action {
+  background: var(--app-primary);
+  border-color: var(--app-primary);
+  color: var(--app-surface);
+}
+.transfer-receipt .transfer-back-action:hover {
+  background: var(--app-primaryHover);
+  border-color: var(--app-primaryHover);
+}
+
 @media (max-width: 1000px) {
   .app-shell {
     --sidebar-width: 200px;

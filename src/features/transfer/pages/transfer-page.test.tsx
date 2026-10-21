@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { onlineManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   createMemoryHistory,
   createRootRoute,
@@ -10,12 +10,14 @@ import {
   RouterProvider,
 } from '@tanstack/react-router';
 import { ConfigProvider } from 'antd';
-import { afterEach, describe, expect, it } from 'vitest';
+import { AxiosError, type AxiosAdapter } from 'axios';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { SessionController } from '@/features/auth/model/session-controller';
 import { SessionProvider } from '@/features/auth/model/session-provider';
-import { errorReply, successReply, type ApiReply } from '@/test/api-adapter';
+import { createApiAdapter, errorReply, successReply, type ApiReply } from '@/test/api-adapter';
 import { createSessionFixture, csrfReply, testSession } from '@/test/auth-session';
+import { createTransferMarkerStore, TRANSFER_MARKER_KEY } from '../model/transfer-marker';
 import { TransferPage } from './transfer-page';
 
 const controllers: SessionController[] = [];
@@ -28,18 +30,26 @@ const wallet = {
   updatedAt: '2026-10-21T14:30:00.123456',
 };
 
-function renderTransfer(replies: ApiReply[] = [], balanceReply = successReply(wallet)) {
+function renderTransfer(
+  replies: ApiReply[] = [],
+  balanceReply = successReply(wallet),
+  wrapAdapter?: (base: AxiosAdapter) => AxiosAdapter,
+) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   clients.push(client);
-  const fixture = createSessionFixture(
-    [csrfReply(), successReply(testSession), balanceReply, ...replies],
-    {
-      clearPrivateData: () => {
-        void client.cancelQueries();
-        client.clear();
-      },
+  const adapter = createApiAdapter([
+    csrfReply(),
+    successReply(testSession),
+    balanceReply,
+    ...replies,
+  ]);
+  const fixture = createSessionFixture([], {
+    adapter: wrapAdapter?.(adapter) ?? adapter,
+    clearPrivateData: () => {
+      void client.cancelQueries();
+      client.clear();
     },
-  );
+  });
   controllers.push(fixture.controller);
   const root = createRootRoute({
     component: () => (
@@ -68,7 +78,7 @@ function renderTransfer(replies: ApiReply[] = [], balanceReply = successReply(wa
     defaultPreload: false,
   });
   render(<RouterProvider router={router} />);
-  return { ...fixture, router };
+  return { ...fixture, router, adapter };
 }
 
 function fillDetails(amount = '1000', description?: string) {
@@ -81,12 +91,240 @@ function fillDetails(amount = '1000', description?: string) {
   }
 }
 
+beforeEach(() => window.sessionStorage.removeItem(TRANSFER_MARKER_KEY));
 afterEach(async () => {
   await Promise.all(controllers.splice(0).map((controller) => controller.stop()));
   for (const client of clients.splice(0)) client.clear();
+  window.sessionStorage.removeItem(TRANSFER_MARKER_KEY);
 });
 
 describe('transfer entry and review', () => {
+  it('sends one confirmed POST, displays the receipt and fetches a fresh wallet snapshot', async () => {
+    const receipt = {
+      transactionId: 91,
+      amount: '1000',
+      fromWalletBalance: '999000',
+      status: 'SUCCESS',
+      createdAt: '2026-10-21T14:30:00.123456',
+    };
+    let release: () => void = () => undefined;
+    let started: () => void = () => undefined;
+    let posts = 0;
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const submitted = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const fixture = renderTransfer(
+      [successReply(receipt), successReply({ ...wallet, balance: 998999 })],
+      successReply(wallet),
+      (base) => async (config) => {
+        if (config.url === '/api/v1/transfer') {
+          posts += 1;
+          started();
+          await pending;
+        }
+        return base(config);
+      },
+    );
+    await screen.findByRole('form', { name: 'Transfer details' });
+    fillDetails('1000', '  lunch  ');
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+    const confirm = await screen.findByRole('button', { name: 'Confirm transfer' });
+    try {
+      fireEvent.click(confirm);
+      fireEvent.click(confirm);
+      await submitted;
+      expect(posts).toBe(1);
+      expect(screen.queryByRole('button', { name: 'Confirm transfer' })).not.toBeInTheDocument();
+      const marker = createTransferMarkerStore().read();
+      expect(marker).toMatchObject({ userId: 1, idempotencyKey: expect.any(String) });
+      expect(Object.keys(marker ?? {}).sort()).toEqual(['idempotencyKey', 'userId']);
+    } finally {
+      release();
+    }
+    await screen.findByRole('heading', { name: 'Transfer successful' });
+    expect(await screen.findByLabelText('Available balance: 998,999 VND')).not.toBeVisible();
+    expect(screen.getByText('1,000 VND')).toBeVisible();
+    expect(screen.getByText('Recipient@example.com')).toBeVisible();
+    expect(screen.getByText('lunch').textContent).toBe('  lunch  ');
+    expect(screen.getByText('21 Oct 2026, 14:30')).toHaveAttribute('dateTime', receipt.createdAt);
+    expect(screen.queryByText('999,000 VND')).not.toBeInTheDocument();
+    expect(screen.queryByText('91')).not.toBeInTheDocument();
+    expect(screen.queryByText('SUCCESS')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Go to wallet' })).toHaveAttribute('href', '/wallet');
+    const post = fixture.adapter.mock.calls
+      .map(([config]) => config)
+      .filter((config) => config.url === '/api/v1/transfer');
+    expect(post).toHaveLength(1);
+    expect(post[0]?.headers.get('Idempotency-Key')).toMatch(/^[0-9a-f-]{36}$/i);
+    expect(post[0]?.data).toBe(
+      JSON.stringify({
+        toEmail: 'Recipient@example.com',
+        amount: '1000',
+        description: '  lunch  ',
+      }),
+    );
+    expect(createTransferMarkerStore().read()).toBeNull();
+  });
+
+  it('keeps transfer success visible if refreshing the current wallet fails', async () => {
+    renderTransfer([
+      successReply({
+        transactionId: 92,
+        amount: '1000',
+        fromWalletBalance: '999000',
+        status: 'SUCCESS',
+        createdAt: '2026-10-21T14:30:00',
+      }),
+      errorReply('INTERNAL_SERVER_ERROR', 500),
+    ]);
+    await screen.findByRole('form', { name: 'Transfer details' });
+    fillDetails();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+    await user.click(await screen.findByRole('button', { name: 'Confirm transfer' }));
+    await screen.findByText('Transfer succeeded. Your current balance could not be updated.');
+    expect(screen.getByRole('heading', { name: 'Transfer successful' })).toBeInTheDocument();
+    expect(screen.queryByText('Message')).not.toBeInTheDocument();
+    expect(screen.queryByText('No description')).not.toBeInTheDocument();
+  });
+
+  it('does not let a late pre-transfer wallet read overwrite the refreshed balance', async () => {
+    let release: () => void = () => undefined;
+    let started: () => void = () => undefined;
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const submitted = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    let reads = 0;
+    renderTransfer(
+      [
+        successReply({
+          transactionId: 94,
+          amount: '1000',
+          fromWalletBalance: '999000',
+          status: 'SUCCESS',
+          createdAt: '2026-10-21T14:30:00',
+        }),
+        successReply({ ...wallet, balance: 998999 }),
+      ],
+      successReply(wallet),
+      (base) => async (config) => {
+        const response = await base(config);
+        if (config.url === '/api/v1/wallet/me' && ++reads === 1) {
+          started();
+          await pending;
+        }
+        return response;
+      },
+    );
+    try {
+      await submitted;
+      await screen.findByRole('form', { name: 'Transfer details' });
+      fillDetails();
+      const user = userEvent.setup();
+      await user.click(screen.getByRole('button', { name: 'Continue' }));
+      await user.click(await screen.findByRole('button', { name: 'Confirm transfer' }));
+      await screen.findByLabelText('Available balance: 998,999 VND');
+    } finally {
+      await act(async () => {
+        release();
+        await pending;
+      });
+    }
+    expect(screen.getByLabelText('Available balance: 998,999 VND')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Available balance: 1,000,000 VND')).not.toBeInTheDocument();
+  });
+
+  it('keeps timeout and lookup 404 unknown without sending another POST', async () => {
+    const fixture = renderTransfer([
+      new AxiosError('private payload', 'ECONNABORTED'),
+      errorReply('TRANSFER_REQUEST_NOT_FOUND', 404),
+    ]);
+    await screen.findByRole('form', { name: 'Transfer details' });
+    fillDetails();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+    await user.click(await screen.findByRole('button', { name: 'Confirm transfer' }));
+    await screen.findByRole('heading', { name: 'Transfer outcome is unknown' });
+    const marker = createTransferMarkerStore().read();
+    await user.click(screen.getByRole('button', { name: 'Check transfer status' }));
+    await screen.findByText(/does not confirm/);
+    expect(createTransferMarkerStore().read()).toEqual(marker);
+    expect(screen.queryByRole('form', { name: 'Transfer details' })).not.toBeInTheDocument();
+    expect(
+      fixture.adapter.mock.calls.filter(([config]) => config.url === '/api/v1/transfer'),
+    ).toHaveLength(1);
+    expect(
+      fixture.adapter.mock.calls.some(
+        ([config]) => config.url === `/api/v1/transfer/requests/${marker?.idempotencyKey}`,
+      ),
+    ).toBe(true);
+    expect(screen.queryByText(/private payload/)).not.toBeInTheDocument();
+  });
+
+  it('does not queue an offline money command for replay after reconnect', async () => {
+    const fixture = renderTransfer([new AxiosError('offline', 'ERR_NETWORK')]);
+    await screen.findByLabelText('Available balance: 1,000,000 VND');
+    fillDetails();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+    onlineManager.setOnline(false);
+    try {
+      await user.click(await screen.findByRole('button', { name: 'Confirm transfer' }));
+      await screen.findByRole('heading', { name: 'Transfer outcome is unknown' });
+      expect(
+        fixture.adapter.mock.calls.filter(([config]) => config.url === '/api/v1/transfer'),
+      ).toHaveLength(1);
+      await act(async () => {
+        onlineManager.setOnline(true);
+      });
+      expect(
+        fixture.adapter.mock.calls.filter(([config]) => config.url === '/api/v1/transfer'),
+      ).toHaveLength(1);
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
+
+  it('restores an existing marker through GET only and displays an exact legacy receipt', async () => {
+    const key = '550e8400-e29b-41d4-a716-446655440000';
+    createTransferMarkerStore().save({ userId: 1, idempotencyKey: key });
+    const fixture = renderTransfer([
+      successReply({
+        idempotencyKey: key,
+        state: 'SUCCEEDED',
+        request: { toEmail: 'Other@example.com', amount: '1000.50', description: null },
+        result: {
+          transactionId: 93,
+          amount: '1000.50',
+          fromWalletBalance: '0.25',
+          status: 'SUCCESS',
+          createdAt: '2026-10-21T14:30:00',
+        },
+        error: null,
+        legacyFractional: true,
+      }),
+      successReply(wallet),
+    ]);
+    await screen.findByRole('heading', { name: 'Transfer outcome is unknown' });
+    expect(
+      fixture.adapter.mock.calls.some(([config]) => config.url?.includes('/transfer/requests/')),
+    ).toBe(false);
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Check transfer status' }));
+    await screen.findByRole('heading', { name: 'Transfer successful' });
+    expect(screen.getByText('1,000.50 VND')).toBeInTheDocument();
+    expect(screen.queryByText('0.25 VND')).not.toBeInTheDocument();
+    expect(
+      fixture.adapter.mock.calls.filter(([config]) => config.url === '/api/v1/transfer'),
+    ).toHaveLength(0);
+  });
+
   it('shows the real balance above the fields and goes back to wallet without sending money', async () => {
     const fixture = renderTransfer();
     const balance = await screen.findByLabelText('Available balance: 1,000,000 VND');
@@ -112,7 +350,7 @@ describe('transfer entry and review', () => {
     await userEvent.setup().click(screen.getByRole('button', { name: 'Continue' }));
     await screen.findByRole('heading', { name: 'Review transfer' });
     expect(screen.getByText('keep this draft')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Confirm transfer' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Confirm transfer' })).toBeEnabled();
   });
 
   it('starts without errors, validates all fields and focuses the first invalid input', async () => {
@@ -183,7 +421,7 @@ describe('transfer entry and review', () => {
         (_, element) => element?.tagName === 'DD' && element.textContent === description,
       ),
     ).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Confirm transfer' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Confirm transfer' })).toBeEnabled();
     await user.keyboard('{Enter}');
     expect(fixture.adapter).toHaveBeenCalledTimes(3);
     expect(fixture.router.state.location.searchStr).toBe('');

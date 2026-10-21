@@ -1,7 +1,7 @@
-import { useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useId, useLayoutEffect, useRef, useState } from 'react';
 import { useForm, useStore } from '@tanstack/react-form';
 import { Link } from '@tanstack/react-router';
-import { Button, Card } from 'antd';
+import { Button } from 'antd';
 
 import { formatVnd } from '@/shared/lib/vnd';
 import {
@@ -16,7 +16,7 @@ import { TransferInput } from './transfer-input';
 const FIELD_NAMES = ['toEmail', 'amount', 'description'] as const;
 const EMPTY_DRAFT: TransferDraft = { toEmail: '', amount: '', description: null };
 
-export function TransferForm({ balance }: { balance: ReactNode }) {
+export function TransferForm({ submit }: { submit: (review: TransferReview) => Promise<void> }) {
   const id = useId();
   const element = useRef<HTMLFormElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
@@ -30,7 +30,7 @@ export function TransferForm({ balance }: { balance: ReactNode }) {
       if (invalid) setFocusRequest({ name: invalid });
     },
     onSubmit: ({ value }) => {
-      // Review is a validated memory snapshot. No transport or key is created here.
+      // Continue only creates a validated snapshot. Confirm dispatches it later.
       setReview(createTransferReview(value));
     },
   });
@@ -46,8 +46,7 @@ export function TransferForm({ balance }: { balance: ReactNode }) {
   }, [review, focusRequest]);
 
   return (
-    <Card className="transfer-card">
-      {balance}
+    <div className="transfer-content">
       {review ? (
         <section aria-labelledby={`${id}-review`} className="transfer-review">
           <h2 id={`${id}-review`} ref={heading} tabIndex={-1}>
@@ -71,7 +70,6 @@ export function TransferForm({ balance }: { balance: ReactNode }) {
               </dd>
             </div>
           </dl>
-          <p className="transfer-field-hint">Transfers are not available yet.</p>
           <div className="transfer-actions">
             <Button
               htmlType="button"
@@ -82,7 +80,13 @@ export function TransferForm({ balance }: { balance: ReactNode }) {
             >
               Go back
             </Button>
-            <Button type="primary" htmlType="button" disabled>
+            <Button
+              type="primary"
+              htmlType="button"
+              onClick={() => {
+                void submit(review);
+              }}
+            >
               Confirm transfer
             </Button>
           </div>
@@ -142,6 +146,6 @@ export function TransferForm({ balance }: { balance: ReactNode }) {
           </fieldset>
         </form>
       )}
-    </Card>
+    </div>
   );
 }
