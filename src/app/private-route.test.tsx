@@ -18,6 +18,7 @@ import { z } from 'zod';
 import type { SessionRole } from '@/features/auth/model/session-access';
 import type { SessionController } from '@/features/auth/model/session-controller';
 import { SessionProvider } from '@/features/auth/model/session-provider';
+import { TransferPage } from '@/features/transfer/pages/transfer-page';
 import { PageHeading } from '@/shared/ui/page-heading';
 import { createApiAdapter, errorReply, successReply } from '@/test/api-adapter';
 import { createSessionFixture, csrfReply, testSession } from '@/test/auth-session';
@@ -67,6 +68,7 @@ function PrivateWallet() {
 function renderPrivateApp(
   fixture: ReturnType<typeof createSessionFixture>,
   roles?: readonly SessionRole[],
+  path: '/wallet' | '/transfer' = '/wallet',
 ) {
   controllers.push(fixture.controller);
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -102,10 +104,15 @@ function renderPrivateApp(
     },
     component: PrivateWallet,
   });
+  const transfer = createRoute({
+    getParentRoute: () => protectedRoute,
+    path: '/transfer',
+    component: TransferPage,
+  });
   const router = createRouter({
-    routeTree: root.addChildren([protectedRoute.addChildren([wallet])]),
+    routeTree: root.addChildren([protectedRoute.addChildren([wallet, transfer])]),
     context: { queryClient, session: fixture.controller, privateApi: fixture.privateApi },
-    history: createMemoryHistory({ initialEntries: ['/wallet'] }),
+    history: createMemoryHistory({ initialEntries: [path] }),
     defaultPreload: false,
   });
   render(
@@ -121,6 +128,49 @@ function renderPrivateApp(
 }
 
 describe('protected route and loader integration', () => {
+  it('keeps a signed-out transfer URL private even during speculative preload', async () => {
+    const fixture = createSessionFixture([], {
+      initial: { version: 1, epoch: '10000000-0000-4000-8000-000000000001', mode: 'signed-out' },
+    });
+    const { router, privateLoader } = renderPrivateApp(fixture, undefined, '/transfer');
+    await screen.findByRole('heading', { name: 'Sign in' });
+    await act(() => router.preloadRoute({ to: '/transfer' }));
+    expect(router.state.location.pathname).toBe('/transfer');
+    expect(screen.queryByRole('heading', { name: 'Transfer' })).not.toBeInTheDocument();
+    expect(privateLoader).not.toHaveBeenCalled();
+    expect(fixture.adapter).not.toHaveBeenCalled();
+  });
+
+  it('opens transfer after login at the same URL and hides it on cross-tab sign out', async () => {
+    const fixture = createSessionFixture([csrfReply(), successReply(testSession)], {
+      initial: { version: 1, epoch: '10000000-0000-4000-8000-000000000001', mode: 'signed-out' },
+    });
+    const { router, privateLoader } = renderPrivateApp(fixture, undefined, '/transfer');
+    await screen.findByRole('heading', { name: 'Sign in' });
+    fireEvent.change(screen.getByLabelText(/^Email address/), {
+      target: { value: testSession.user.email },
+    });
+    fireEvent.change(screen.getByLabelText(/^Password/), { target: { value: 'secret' } });
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Sign in' }));
+    await screen.findByRole('heading', { name: 'Transfer' });
+    expect(router.state.location.pathname).toBe('/transfer');
+    expect(privateLoader).not.toHaveBeenCalled();
+    expect(fixture.adapter.mock.calls.map(([config]) => config.url)).toEqual([
+      '/api/v1/auth/csrf',
+      '/api/v1/auth/login',
+    ]);
+    expect(screen.queryByRole('button', { name: /Confirm transfer/ })).not.toBeInTheDocument();
+
+    const otherTab = fixture.hub.connect();
+    await act(() =>
+      otherTab.change(() => ({ version: 1, epoch: otherTab.newEpoch(), mode: 'signed-out' })),
+    );
+    await screen.findByRole('heading', { name: 'Sign in' });
+    expect(screen.queryByRole('heading', { name: 'Transfer' })).not.toBeInTheDocument();
+    expect(router.state.location.pathname).toBe('/transfer');
+    expect(fixture.adapter).toHaveBeenCalledTimes(2);
+  });
+
   it('hides the private page and draft before logout completes and preserves its URL', async () => {
     let release: () => void = () => undefined;
     let submitted = false;

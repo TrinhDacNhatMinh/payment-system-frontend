@@ -1,12 +1,21 @@
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import {
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  Outlet,
+  RouterProvider,
+} from '@tanstack/react-router';
 import { ConfigProvider } from 'antd';
 import { AxiosError, type AxiosAdapter } from 'axios';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { SessionProvider } from '@/features/auth/model/session-provider';
 import type { SessionController } from '@/features/auth/model/session-controller';
+import { TransferPage } from '@/features/transfer/pages/transfer-page';
 import { createApiAdapter, errorReply, successReply, type ApiReply } from '@/test/api-adapter';
 import { createSessionFixture, csrfReply, testSession } from '@/test/auth-session';
 import { WalletPage } from './wallet-page';
@@ -32,16 +41,34 @@ function renderWallet(replies: ApiReply[], adapter?: AxiosAdapter) {
   });
   clients.push(client);
   controllers.push(fixture.controller);
-  render(
-    <QueryClientProvider client={client}>
-      <ConfigProvider theme={{ token: { motion: false } }}>
-        <SessionProvider controller={fixture.controller} privateApi={fixture.privateApi}>
-          <WalletPage />
-        </SessionProvider>
-      </ConfigProvider>
-    </QueryClientProvider>,
-  );
-  return { ...fixture, client };
+  const root = createRootRoute({
+    component: () => (
+      <QueryClientProvider client={client}>
+        <ConfigProvider theme={{ token: { motion: false } }}>
+          <SessionProvider controller={fixture.controller} privateApi={fixture.privateApi}>
+            <Outlet />
+          </SessionProvider>
+        </ConfigProvider>
+      </QueryClientProvider>
+    ),
+  });
+  const walletRoute = createRoute({
+    getParentRoute: () => root,
+    path: '/wallet',
+    component: WalletPage,
+  });
+  const transferRoute = createRoute({
+    getParentRoute: () => root,
+    path: '/transfer',
+    component: TransferPage,
+  });
+  const router = createRouter({
+    routeTree: root.addChildren([walletRoute, transferRoute]),
+    history: createMemoryHistory({ initialEntries: ['/wallet'] }),
+    defaultPreload: false,
+  });
+  render(<RouterProvider router={router} />);
+  return { ...fixture, client, router };
 }
 
 afterEach(async () => {
@@ -50,6 +77,22 @@ afterEach(async () => {
 });
 
 describe('wallet page with session-bound API', () => {
+  it('opens the transfer shell from the wallet without sending a money request', async () => {
+    const fixture = renderWallet([successReply(wallet)]);
+    await screen.findByLabelText('Available balance: 12,000 VND');
+    await userEvent.setup().click(screen.getByRole('link', { name: 'Transfer' }));
+    await screen.findByRole('heading', { name: 'Transfer' });
+    expect(fixture.router.state.location.pathname).toBe('/transfer');
+    expect(screen.getByText('Transfers are not available yet.')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Back to wallet' })).toHaveAttribute('href', '/wallet');
+    expect(screen.queryByRole('button', { name: /Confirm transfer/ })).not.toBeInTheDocument();
+    expect(fixture.adapter.mock.calls.map(([config]) => config.url)).toEqual([
+      '/api/v1/auth/csrf',
+      '/api/v1/auth/refresh',
+      '/api/v1/wallet/me',
+    ]);
+  });
+
   it('does not request or display wallet data while the session is still restoring', async () => {
     let release: () => void = () => undefined;
     let markRestoring: () => void = () => undefined;
@@ -82,8 +125,10 @@ describe('wallet page with session-bound API', () => {
     const fixture = renderWallet([successReply({ ...wallet, balance: 0 })]);
     await screen.findByLabelText('Available balance: 0 VND');
     expect(screen.queryByText(/Oct 21, 2026/)).not.toBeInTheDocument();
-    for (const name of ['Top up', 'Transfer', 'Transaction history']) {
+    expect(screen.getByRole('link', { name: 'Transfer' })).toHaveAttribute('href', '/transfer');
+    for (const name of ['Top up', 'Transaction history']) {
       expect(screen.queryByRole('button', { name })).not.toBeInTheDocument();
+      expect(screen.queryByRole('link', { name })).not.toBeInTheDocument();
     }
     for (const text of [
       'Wallet actions',

@@ -66,8 +66,9 @@ async function renderLayout(component: () => ReactNode) {
     component: () => <ConfigProvider theme={createTheme(true)}>{component()}</ConfigProvider>,
   });
   const wallet = createRoute({ getParentRoute: () => root, path: '/wallet' });
+  const transfer = createRoute({ getParentRoute: () => root, path: '/transfer' });
   const router = createRouter({
-    routeTree: root.addChildren([wallet]),
+    routeTree: root.addChildren([wallet, transfer]),
     history: createMemoryHistory({ initialEntries: ['/wallet'] }),
   });
   await act(() => router.load());
@@ -76,6 +77,35 @@ async function renderLayout(component: () => ReactNode) {
 }
 
 describe('application navigation', () => {
+  it.each([390, 1200])('navigates to Transfer and marks it active at %spx', async (width) => {
+    viewportWidth = width;
+    const user = userEvent.setup();
+    const router = await renderLayout(() => (
+      <AppLayout>
+        <h1>Page content</h1>
+      </AppLayout>
+    ));
+    if (width <= 700) await user.click(screen.getByRole('button', { name: 'Open menu' }));
+    const transfer = await screen.findByRole('link', { name: 'Transfer' });
+    expect(transfer).toHaveAttribute('href', '/transfer');
+    await user.hover(transfer);
+    expect(router.state.location.pathname).toBe('/wallet');
+    await user.click(transfer);
+    await waitFor(() => expect(router.state.location.pathname).toBe('/transfer'));
+    if (width <= 700) {
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      await user.click(screen.getByRole('button', { name: 'Open menu' }));
+    }
+    expect(await screen.findByRole('link', { name: 'Transfer' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+    expect(screen.getByRole('link', { name: 'Wallet' })).not.toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+  });
+
   it('closes the mobile drawer with Escape and returns focus to its trigger', async () => {
     const user = userEvent.setup();
     await renderLayout(() => (
@@ -90,7 +120,11 @@ describe('application navigation', () => {
       'aria-current',
       'page',
     );
-    for (const name of [/Transfer/, /Top up/, /Transactions/]) {
+    expect(within(dialog).getByRole('link', { name: 'Transfer' })).toHaveAttribute(
+      'href',
+      '/transfer',
+    );
+    for (const name of [/Top up/, /Transactions/]) {
       expect(within(dialog).queryByRole('button', { name })).not.toBeInTheDocument();
       expect(within(dialog).queryByRole('link', { name })).not.toBeInTheDocument();
     }

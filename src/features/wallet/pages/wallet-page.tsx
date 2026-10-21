@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { EyeInvisibleOutlined, EyeOutlined } from '@ant-design/icons';
+import { EyeInvisibleOutlined, EyeOutlined, SwapOutlined } from '@ant-design/icons';
+import { Link } from '@tanstack/react-router';
 import { Alert, Button, Card, Spin } from 'antd';
 
 import type { SessionAccess } from '@/features/auth/model/session-access';
@@ -136,6 +137,9 @@ function WalletContent({
             )}
           </Card>
         )}
+        <Link to="/transfer" preload={false} className="wallet-transfer-link">
+          <SwapOutlined aria-hidden="true" /> Transfer
+        </Link>
       </div>
     </div>
   );

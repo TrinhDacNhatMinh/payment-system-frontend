@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index';
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated';
 import { Route as LoginRouteImport } from './routes/login';
 import { Route as RegisterRouteImport } from './routes/register';
+import { Route as AuthenticatedTransferRouteImport } from './routes/_authenticated.transfer';
 import { Route as AuthenticatedWalletRouteImport } from './routes/_authenticated.wallet';
 
 const IndexRoute = IndexRouteImport.update({
@@ -34,6 +35,11 @@ const RegisterRoute = RegisterRouteImport.update({
   path: '/register',
   getParentRoute: () => rootRouteImport,
 } as any);
+const AuthenticatedTransferRoute = AuthenticatedTransferRouteImport.update({
+  id: '/transfer',
+  path: '/transfer',
+  getParentRoute: () => AuthenticatedRoute,
+} as any);
 const AuthenticatedWalletRoute = AuthenticatedWalletRouteImport.update({
   id: '/wallet',
   path: '/wallet',
@@ -44,12 +50,14 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute;
   '/login': typeof LoginRoute;
   '/register': typeof RegisterRoute;
+  '/transfer': typeof AuthenticatedTransferRoute;
   '/wallet': typeof AuthenticatedWalletRoute;
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute;
   '/login': typeof LoginRoute;
   '/register': typeof RegisterRoute;
+  '/transfer': typeof AuthenticatedTransferRoute;
   '/wallet': typeof AuthenticatedWalletRoute;
 }
 export interface FileRoutesById {
@@ -58,19 +66,21 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteWithChildren;
   '/login': typeof LoginRoute;
   '/register': typeof RegisterRoute;
+  '/_authenticated/transfer': typeof AuthenticatedTransferRoute;
   '/_authenticated/wallet': typeof AuthenticatedWalletRoute;
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath;
-  fullPaths: '/' | '/login' | '/register' | '/wallet';
+  fullPaths: '/' | '/login' | '/register' | '/transfer' | '/wallet';
   fileRoutesByTo: FileRoutesByTo;
-  to: '/' | '/login' | '/register' | '/wallet';
+  to: '/' | '/login' | '/register' | '/transfer' | '/wallet';
   id:
     | '__root__'
     | '/'
     | '/_authenticated'
     | '/login'
     | '/register'
+    | '/_authenticated/transfer'
     | '/_authenticated/wallet';
   fileRoutesById: FileRoutesById;
 }
@@ -111,6 +121,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RegisterRouteImport;
       parentRoute: typeof rootRouteImport;
     };
+    '/_authenticated/transfer': {
+      id: '/_authenticated/transfer';
+      path: '/transfer';
+      fullPath: '/transfer';
+      preLoaderRoute: typeof AuthenticatedTransferRouteImport;
+      parentRoute: typeof AuthenticatedRoute;
+    };
     '/_authenticated/wallet': {
       id: '/_authenticated/wallet';
       path: '/wallet';
@@ -122,10 +139,12 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthenticatedRouteChildren {
+  AuthenticatedTransferRoute: typeof AuthenticatedTransferRoute;
   AuthenticatedWalletRoute: typeof AuthenticatedWalletRoute;
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
+  AuthenticatedTransferRoute: AuthenticatedTransferRoute,
   AuthenticatedWalletRoute: AuthenticatedWalletRoute,
 };
 

@@ -306,7 +306,8 @@ body {
   outline-offset: 3px;
 }
 
-.wallet-panel {
+.wallet-panel,
+.transfer-panel {
   width: 100%;
   max-width: 720px;
   margin-inline: auto;
@@ -316,6 +317,24 @@ body {
   grid-template-columns: minmax(0, 1fr);
   min-width: 0;
   gap: 24px;
+}
+.wallet-transfer-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  justify-self: end;
+  gap: 8px;
+  min-height: 44px;
+  padding: 8px 20px;
+  border-radius: 6px;
+  background: var(--app-primary);
+  color: var(--app-surface);
+  font-weight: 600;
+  text-decoration: none;
+}
+.wallet-transfer-link:hover {
+  background: var(--app-primaryHover);
+  color: var(--app-surface);
 }
 .wallet-balance-heading {
   display: flex;

@@ -38,9 +38,17 @@ async function renderLogin(fixture: ReturnType<typeof createSessionFixture>, ret
     path: '/register',
     component: () => <h1>Previous page</h1>,
   });
+  const transfer = createRoute({
+    getParentRoute: () => root,
+    path: '/transfer',
+    component: () => <h1>Transfer destination</h1>,
+  });
   const history = createMemoryHistory({ initialEntries: ['/register', '/login'] });
   history.replace('/login', { authReturnTo: returnTo });
-  const router = createRouter({ routeTree: root.addChildren([login, wallet, register]), history });
+  const router = createRouter({
+    routeTree: root.addChildren([login, wallet, register, transfer]),
+    history,
+  });
   await act(() => router.load());
   render(
     <ConfigProvider theme={{ token: { motion: false } }}>
@@ -53,6 +61,15 @@ async function renderLogin(fixture: ReturnType<typeof createSessionFixture>, ret
 }
 
 describe('public sign-in session handling', () => {
+  it('returns an authenticated login page to the allowlisted transfer destination', async () => {
+    const fixture = createSessionFixture([csrfReply(), successReply(testSession)]);
+    const { router } = await renderLogin(fixture, '/transfer');
+    await screen.findByRole('heading', { name: 'Transfer destination' });
+    expect(router.state.location.pathname).toBe('/transfer');
+    expect(screen.queryByLabelText(/^Password/)).not.toBeInTheDocument();
+    expect(fixture.adapter).toHaveBeenCalledTimes(2);
+  });
+
   it.each(['/wallet', 'https://untrusted.example', '//untrusted.example', undefined])(
     'replaces login with wallet after verified bootstrap for return target %s',
     async (returnTo) => {

@@ -1,4 +1,4 @@
-import { WalletOutlined } from '@ant-design/icons';
+import { SwapOutlined, WalletOutlined } from '@ant-design/icons';
 import { Link } from '@tanstack/react-router';
 
 export function AppNavigation({ onNavigate }: { onNavigate?: () => void }) {
@@ -15,6 +15,18 @@ export function AppNavigation({ onNavigate }: { onNavigate?: () => void }) {
         onClick={onNavigate}
       >
         <WalletOutlined aria-hidden="true" /> Wallet
+      </Link>
+      <Link
+        to="/transfer"
+        preload={false}
+        className="navigation-item"
+        activeProps={{
+          className: 'navigation-item navigation-item-active',
+          'aria-current': 'page',
+        }}
+        onClick={onNavigate}
+      >
+        <SwapOutlined aria-hidden="true" /> Transfer
       </Link>
     </nav>
   );

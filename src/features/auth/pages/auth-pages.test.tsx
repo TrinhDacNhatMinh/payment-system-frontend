@@ -24,7 +24,7 @@ const registeredUser = {
   status: 'ACTIVE',
 } as const;
 
-async function renderPages(path: '/wallet' | '/register', actions: AuthFormActions) {
+async function renderPages(path: '/wallet' | '/transfer' | '/register', actions: AuthFormActions) {
   const root = createRootRoute({ component: Outlet });
   const routes = [
     createRoute({ getParentRoute: () => root, path: '/login', component: SignInPage }),
@@ -32,6 +32,11 @@ async function renderPages(path: '/wallet' | '/register', actions: AuthFormActio
     createRoute({
       getParentRoute: () => root,
       path: '/wallet',
+      component: () => <SignInPage embedded />,
+    }),
+    createRoute({
+      getParentRoute: () => root,
+      path: '/transfer',
       component: () => <SignInPage embedded />,
     }),
   ];
@@ -51,31 +56,34 @@ async function renderPages(path: '/wallet' | '/register', actions: AuthFormActio
 }
 
 describe('registration navigation', () => {
-  it('keeps a private return destination and never logs in automatically after registration', async () => {
-    const login = vi.fn().mockResolvedValue(undefined);
-    const register = vi.fn().mockResolvedValue(registeredUser);
-    const router = await renderPages('/wallet', { login, register });
-    await userEvent.setup().click(await screen.findByRole('link', { name: 'Create account' }));
-    await screen.findByLabelText(/^Full name/);
-    expect(router.state.location.pathname).toBe('/register');
-    expect(router.state.location.state.authReturnTo).toBe('/wallet');
-    fireEvent.change(screen.getByLabelText(/^Full name/), { target: { value: 'Member' } });
-    fireEvent.change(screen.getByLabelText(/^Email address/), {
-      target: { value: 'member@example.com' },
-    });
-    fireEvent.change(screen.getByLabelText(/^Phone number/), { target: { value: 'any phone' } });
-    fireEvent.change(screen.getByLabelText(/^Password/), { target: { value: 'secret' } });
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Create account' }));
-    await screen.findByRole('heading', { name: 'Account created' });
-    expect(register).toHaveBeenCalledTimes(1);
-    expect(login).not.toHaveBeenCalled();
-    expect(screen.queryByLabelText(/^Password/)).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Go to sign in' })).toHaveAttribute('href', '/wallet');
-    expect(router.state.location.searchStr).toBe('');
-    await userEvent.setup().click(screen.getByRole('link', { name: 'Go to sign in' }));
-    await waitFor(() => expect(router.state.location.pathname).toBe('/wallet'));
-    expect(login).not.toHaveBeenCalled();
-  });
+  it.each(['/wallet', '/transfer'] as const)(
+    'preserves %s through registration without logging in',
+    async (path) => {
+      const login = vi.fn().mockResolvedValue(undefined);
+      const register = vi.fn().mockResolvedValue(registeredUser);
+      const router = await renderPages(path, { login, register });
+      await userEvent.setup().click(await screen.findByRole('link', { name: 'Create account' }));
+      await screen.findByLabelText(/^Full name/);
+      expect(router.state.location.pathname).toBe('/register');
+      expect(router.state.location.state.authReturnTo).toBe(path);
+      fireEvent.change(screen.getByLabelText(/^Full name/), { target: { value: 'Member' } });
+      fireEvent.change(screen.getByLabelText(/^Email address/), {
+        target: { value: 'member@example.com' },
+      });
+      fireEvent.change(screen.getByLabelText(/^Phone number/), { target: { value: 'any phone' } });
+      fireEvent.change(screen.getByLabelText(/^Password/), { target: { value: 'secret' } });
+      await userEvent.setup().click(screen.getByRole('button', { name: 'Create account' }));
+      await screen.findByRole('heading', { name: 'Account created' });
+      expect(register).toHaveBeenCalledTimes(1);
+      expect(login).not.toHaveBeenCalled();
+      expect(screen.queryByLabelText(/^Password/)).not.toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'Go to sign in' })).toHaveAttribute('href', path);
+      expect(router.state.location.searchStr).toBe('');
+      await userEvent.setup().click(screen.getByRole('link', { name: 'Go to sign in' }));
+      await waitFor(() => expect(router.state.location.pathname).toBe(path));
+      expect(login).not.toHaveBeenCalled();
+    },
+  );
 
   it('returns direct registrations to the public sign-in page', async () => {
     await renderPages('/register', { login: vi.fn(), register: vi.fn() });
