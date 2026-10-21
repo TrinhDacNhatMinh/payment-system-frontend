@@ -306,6 +306,72 @@ body {
   outline-offset: 3px;
 }
 
+.wallet-panel {
+  width: 100%;
+  max-width: 720px;
+  margin-inline: auto;
+}
+.wallet-stack {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+  gap: 24px;
+}
+.wallet-balance-heading {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+.wallet-balance-heading h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--app-textSecondary);
+}
+.wallet-balance-card {
+  container-type: inline-size;
+  text-align: right;
+}
+.wallet-balance {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin: 16px 0 0;
+  font-size: clamp(24px, 3.5vw, 38px);
+  line-height: 1.3;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.wallet-balance-long {
+  font-size: 20px;
+  font-size: clamp(16px, 4cqi, 30px);
+}
+.wallet-number {
+  white-space: nowrap;
+}
+.wallet-currency {
+  font-size: 0.65em;
+  font-weight: 500;
+  color: var(--app-textSecondary);
+}
+.wallet-visibility {
+  flex-shrink: 0;
+  min-width: 44px;
+  min-height: 44px;
+}
+.wallet-refresh-error {
+  margin-top: 12px;
+}
+.wallet-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 160px;
+}
+
 @media (max-width: 1000px) {
   .app-shell {
     --sidebar-width: 200px;

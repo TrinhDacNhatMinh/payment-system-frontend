@@ -18,7 +18,7 @@ import { z } from 'zod';
 import type { SessionRole } from '@/features/auth/model/session-access';
 import type { SessionController } from '@/features/auth/model/session-controller';
 import { SessionProvider } from '@/features/auth/model/session-provider';
-import { WalletPage } from '@/features/wallet/pages/wallet-page';
+import { PageHeading } from '@/shared/ui/page-heading';
 import { createApiAdapter, errorReply, successReply } from '@/test/api-adapter';
 import { createSessionFixture, csrfReply, testSession } from '@/test/auth-session';
 import { AuthenticatedPage } from './layouts/authenticated-page';
@@ -57,7 +57,8 @@ function TestRouter({ router }: { router: AnyRouter }) {
 function PrivateWallet() {
   return (
     <>
-      <WalletPage />
+      {/* Guard tests use their own controlled loader; real wallet queries have separate coverage. */}
+      <PageHeading title="My wallet" />
       <input aria-label="Private draft" />
     </>
   );

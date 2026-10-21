@@ -90,7 +90,10 @@ describe('application navigation', () => {
       'aria-current',
       'page',
     );
-    expect(within(dialog).getByRole('button', { name: /Transfer/ })).toBeDisabled();
+    for (const name of [/Transfer/, /Top up/, /Transactions/]) {
+      expect(within(dialog).queryByRole('button', { name })).not.toBeInTheDocument();
+      expect(within(dialog).queryByRole('link', { name })).not.toBeInTheDocument();
+    }
     await user.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     await waitFor(() => expect(trigger).toHaveFocus());
