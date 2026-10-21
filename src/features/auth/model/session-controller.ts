@@ -31,6 +31,7 @@ type Job = {
   submitted: boolean;
   kind: 'login' | 'register' | 'refresh';
   previousUserId: number | null;
+  previousRole: AuthSession['user']['role'] | null;
 };
 
 type SessionDependencies = {
@@ -60,6 +61,7 @@ export function createSessionController(dependencies: SessionDependencies) {
   let token: string | null = null;
   let refreshAt = 0;
   let timer: ReturnType<typeof setTimeout> | null = null;
+  let expiryTimer: ReturnType<typeof setTimeout> | null = null;
   let refreshFlight: Promise<void> | null = null;
   let stopBarrier: Promise<void> | null = null;
   let cleanupFailed = false;
@@ -76,7 +78,9 @@ export function createSessionController(dependencies: SessionDependencies) {
 
   function stopTimer() {
     if (timer !== null) clearTimer(timer);
+    if (expiryTimer !== null) clearTimer(expiryTimer);
     timer = null;
+    expiryTimer = null;
   }
 
   function clearMemory(abortJobs = false) {
@@ -131,10 +135,16 @@ export function createSessionController(dependencies: SessionDependencies) {
     mode: AuthControl['mode'],
     status: SignedOutStatus,
     message: string,
+    stillApplies: () => boolean = () => true,
   ) {
-    if (!current(job)) return;
+    if (!current(job) || !stillApplies()) return;
     const next = await coordination.change((control) =>
-      isControl(control) && control.epoch === job.epoch
+      running &&
+      job.generation === generation &&
+      !job.abort.signal.aborted &&
+      isControl(control) &&
+      control.epoch === job.epoch &&
+      stillApplies()
         ? { version: 1, epoch: coordination.newEpoch(), mode }
         : null,
     );
@@ -156,6 +166,38 @@ export function createSessionController(dependencies: SessionDependencies) {
       },
       Math.min(Math.max(0, refreshAt - now()), 2_147_483_647),
     );
+    const epoch = state.epoch;
+    const expiresAt = state.expiresAt;
+    expiryTimer = setTimer(
+      () => {
+        expiryTimer = null;
+        if (!running || state.status !== 'authenticated' || state.epoch !== epoch) return;
+        if (now() < expiresAt) {
+          planRefresh();
+          return;
+        }
+        clearMemory();
+        emit({ status: 'restoring', epoch, available: true });
+        void restore();
+      },
+      Math.min(Math.max(0, expiresAt - now()), 2_147_483_647),
+    );
+  }
+
+  function isCurrentEpoch(epoch: string) {
+    if (!running || state.epoch !== epoch) return false;
+    try {
+      const control = coordination.read();
+      return isControl(control) && control.mode === 'active' && control.epoch === epoch;
+    } catch {
+      return false;
+    }
+  }
+
+  function getAccessIdentity() {
+    if (!running || !token || state.status !== 'authenticated' || now() >= state.expiresAt)
+      return null;
+    return isCurrentEpoch(state.epoch) ? { epoch: state.epoch, user: state.user } : null;
   }
 
   function getAccessToken() {
@@ -205,6 +247,7 @@ export function createSessionController(dependencies: SessionDependencies) {
       epoch: null,
       submitted: false,
       previousUserId: state.status === 'authenticated' ? state.user.id : null,
+      previousRole: state.status === 'authenticated' ? state.user.role : null,
     };
     const onAbort = () => job.abort.abort();
     if (signal?.aborted) job.abort.abort();
@@ -264,9 +307,15 @@ export function createSessionController(dependencies: SessionDependencies) {
       );
       throw new ApiError('protocol');
     }
-    const userChanged = job.previousUserId !== null && job.previousUserId !== session.user.id;
+    const userChanged =
+      job.previousUserId !== null &&
+      (job.previousUserId !== session.user.id || job.previousRole !== session.user.role);
     const next = await coordination.change((control) =>
-      isControl(control) && control.epoch === job.epoch
+      running &&
+      job.generation === generation &&
+      !job.abort.signal.aborted &&
+      isControl(control) &&
+      control.epoch === job.epoch
         ? {
             ...control,
             mode: 'active',
@@ -363,7 +412,7 @@ export function createSessionController(dependencies: SessionDependencies) {
     return underAuthLock(job, action);
   }
 
-  function restore(): Promise<void> {
+  function restore(rejectedAccessToken?: string): Promise<void> {
     if (!running || !state.available || state.status === 'signing-in') return Promise.resolve();
     if (refreshFlight) return refreshFlight;
     const { job, release } = newJob('refresh');
@@ -388,7 +437,8 @@ export function createSessionController(dependencies: SessionDependencies) {
         observed = control;
         job.epoch = control.epoch;
         if (!current(job, 'active')) return;
-        if (getAccessToken() && now() < refreshAt) return;
+        const currentToken = getAccessToken();
+        if (currentToken && currentToken !== rejectedAccessToken && now() < refreshAt) return;
         if (state.status !== 'authenticated' || now() >= state.expiresAt) {
           clearMemory();
           emit({ status: 'restoring', epoch: control.epoch, available: true });
@@ -633,6 +683,8 @@ export function createSessionController(dependencies: SessionDependencies) {
     restore,
     checkDeadline,
     getAccessToken,
+    getAccessIdentity,
+    isCurrentEpoch,
     login,
     register,
     getSnapshot: () => state,
@@ -647,6 +699,28 @@ export function createSessionController(dependencies: SessionDependencies) {
       const value = getAccessToken();
       if (!value) throw new ApiError('business', { code: 'UNAUTHORIZED' });
       return value;
+    },
+    async renewAccessToken(rejectedAccessToken: string) {
+      await restore(rejectedAccessToken);
+      const value = getAccessToken();
+      if (!value) throw new ApiError('business', { code: 'UNAUTHORIZED' });
+      return value;
+    },
+    async rejectAccess(epoch: string, rejectedAccessToken: string, locked = false) {
+      if (getAccessToken() !== rejectedAccessToken || getAccessIdentity()?.epoch !== epoch) return;
+      const { job, release } = newJob('refresh');
+      job.epoch = epoch;
+      try {
+        await block(
+          job,
+          'reauth-required',
+          locked ? 'locked' : 'reauth-required',
+          locked ? 'Your account is locked.' : 'Please sign in again to continue.',
+          () => token === rejectedAccessToken,
+        );
+      } finally {
+        release();
+      }
     },
   };
 }

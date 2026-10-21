@@ -1,9 +1,8 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { RouterProvider } from '@tanstack/react-router';
 
 import { AppProviders } from '@/app/providers';
-import { router } from '@/app/router';
+import { AppRouter } from '@/app/app-router';
 import '@/shared/config/env';
 import { applyThemeVariables } from '@/shared/theme/theme';
 import '@/shared/theme/styles.css';
@@ -18,7 +17,7 @@ applyThemeVariables(document.documentElement);
 createRoot(rootElement).render(
   <StrictMode>
     <AppProviders>
-      <RouterProvider router={router} />
+      <AppRouter />
     </AppProviders>
   </StrictMode>,
 );

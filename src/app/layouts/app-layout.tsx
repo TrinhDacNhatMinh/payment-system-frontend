@@ -9,7 +9,7 @@ import { AppNavigation } from './app-navigation';
 
 type AppLayoutProps = PropsWithChildren<
   | { account?: undefined; onSignOut?: never; signingOut?: never }
-  | { account: { email: string }; onSignOut: () => void; signingOut?: boolean }
+  | { account: { email: string }; onSignOut?: () => void; signingOut?: boolean }
 >;
 
 // Keep this aligned with the <=700px layout breakpoint in styles.css.
@@ -28,7 +28,7 @@ export function AppLayout({ account, onSignOut, signingOut = false, children }: 
     setOpenedAt(null);
   }
 
-  const signOutControl = account && (
+  const signOutControl = account && onSignOut && (
     <Button
       htmlType="button"
       icon={<LogoutOutlined aria-hidden="true" />}

@@ -5,7 +5,7 @@ import { queryClient } from './query-client';
 
 export const router = createRouter({
   routeTree,
-  context: { queryClient },
+  context: { queryClient, session: null, privateApi: null },
   defaultPreload: false,
   scrollRestoration: true,
 });

@@ -8,8 +8,8 @@ import { parseBaseResponse } from './base-response';
 const REQUEST_TIMEOUT_MS = 15_000;
 export const CSRF_HEADER_NAME = 'X-XSRF-TOKEN';
 
-type RequestOptions = {
-  method: 'GET' | 'POST' | 'PATCH';
+export type RequestOptions = {
+  method: 'GET' | 'HEAD' | 'POST' | 'PATCH';
   path: string;
   data?: unknown;
   params?: Record<string, string | number | boolean | undefined>;
@@ -69,7 +69,8 @@ export function createHttpClients(options: HttpClientOptions) {
         try {
           validatePath(request.path, request.method, auth);
           const headers: Record<string, string> = {};
-          if (request.method !== 'GET') headers['Content-Type'] = 'application/json';
+          if (request.method !== 'GET' && request.method !== 'HEAD')
+            headers['Content-Type'] = 'application/json';
           if (auth && request.method === 'POST') {
             if (!request.csrfToken) throw new ApiError('client');
             headers[CSRF_HEADER_NAME] = request.csrfToken;
@@ -88,6 +89,11 @@ export function createHttpClients(options: HttpClientOptions) {
             signal: request.signal,
             headers,
           });
+          if (request.method === 'HEAD' && response.status >= 200 && response.status < 300) {
+            const result = schema.safeParse(undefined);
+            if (!result.success) throw new ApiError('protocol', { status: response.status });
+            return result.data;
+          }
           return parseBaseResponse(response.data, response.status, schema);
         } catch (error) {
           throw normalizeApiError(error);
@@ -96,7 +102,7 @@ export function createHttpClients(options: HttpClientOptions) {
     };
   }
 
-  // No refresh/replay interceptor. Session orchestration is added at I1-07–09;
-  // auth failures must never enter business-token refresh handling.
+  // Raw transports never refresh/replay. The auth feature wraps business calls
+  // with session checks; auth calls remain outside that wrapper.
   return { auth: createTransport(true), business: createTransport(false) };
 }

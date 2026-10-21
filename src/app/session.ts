@@ -1,4 +1,5 @@
 import { createBrowserSessionCoordination } from '@/features/auth/model/browser-session-coordination';
+import { createPrivateApi } from '@/features/auth/api/private-api';
 import {
   createSessionController,
   type SessionController,
@@ -17,5 +18,5 @@ export function createAppSession() {
       queryClient.clear();
     },
   });
-  return controller;
+  return { controller, privateApi: createPrivateApi(clients.business, controller) };
 }

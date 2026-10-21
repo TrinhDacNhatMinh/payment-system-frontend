@@ -17,7 +17,9 @@ export function AppProviders({ children }: PropsWithChildren) {
     <QueryClientProvider client={queryClient}>
       <ConfigProvider locale={enUS} theme={createTheme(reducedMotion)}>
         <App>
-          <SessionProvider controller={session}>{children}</SessionProvider>
+          <SessionProvider controller={session.controller} privateApi={session.privateApi}>
+            {children}
+          </SessionProvider>
         </App>
       </ConfigProvider>
     </QueryClientProvider>

@@ -18,13 +18,12 @@ export function SignedOutPage() {
     );
   }
   if (state?.status === 'authenticated') {
-    // I1-08 will replace this session summary with the guarded private Outlet.
     return (
       <AppLayout>
         <ContentState
-          kind="empty"
-          title="Signed in"
-          description={`${state.user.email} — Your session is active. Wallet access is not available yet.`}
+          kind="loading"
+          title="Loading your page…"
+          description="Please wait while we verify access to this page."
         />
       </AppLayout>
     );

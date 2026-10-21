@@ -380,6 +380,67 @@ describe('explicit login and registration', () => {
 });
 
 describe('cross-tab and lifecycle races', () => {
+  it('hides expired access while a slow proactive refresh is still pending', async () => {
+    const hub = createSessionCoordinationHub(active);
+    let release: () => void = () => undefined;
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let refreshCount = 0;
+    const base = createApiAdapter([
+      csrf(),
+      successReply(session),
+      csrf(),
+      successReply({ ...session, accessToken: 'fresh' }),
+    ]);
+    const delayed: AxiosAdapter = async (config) => {
+      if (config.url === '/api/v1/auth/refresh' && ++refreshCount === 2) await pending;
+      return base(config);
+    };
+    const { controller, clearPrivateData } = setup([], hub.connect(), delayed);
+    controller.start();
+    await controller.restore();
+    clearPrivateData.mockClear();
+    let refresh: Promise<void>;
+    try {
+      await vi.advanceTimersByTimeAsync(90_000);
+      refresh = controller.restore();
+      expect(controller.getSnapshot().status).toBe('authenticated');
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(controller.getSnapshot().status).toBe('restoring');
+      expect(controller.getAccessIdentity()).toBeNull();
+      expect(clearPrivateData).toHaveBeenCalled();
+    } finally {
+      release();
+    }
+    await refresh;
+    expect(controller.getAccessToken()).toBe('fresh');
+    expect(controller.getSnapshot().status).toBe('authenticated');
+  });
+
+  it('changes epoch and clears private data when refresh changes the role', async () => {
+    const hub = createSessionCoordinationHub(active);
+    const { controller, clearPrivateData } = setup(
+      [
+        csrf(),
+        successReply(session),
+        csrf(),
+        successReply({ ...session, user: { ...session.user, role: 'ADMIN' } }),
+      ],
+      hub.connect(),
+    );
+    controller.start();
+    await controller.restore();
+    clearPrivateData.mockClear();
+    await vi.advanceTimersByTimeAsync(90_000);
+    expect(controller.getSnapshot()).toMatchObject({
+      status: 'authenticated',
+      user: { role: 'ADMIN' },
+    });
+    expect(hub.read()).not.toMatchObject({ epoch: active.epoch });
+    expect(clearPrivateData).toHaveBeenCalled();
+  });
+
   it('serializes refresh from two tabs while each keeps its own memory token', async () => {
     const hub = createSessionCoordinationHub(active);
     let inFlight = 0;

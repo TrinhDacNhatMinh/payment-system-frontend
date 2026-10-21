@@ -3,11 +3,13 @@ import { useEffect, useSyncExternalStore, type PropsWithChildren } from 'react';
 import { AuthFormActionsContext } from './auth-form-actions';
 import { SessionContext } from './session-context';
 import type { SessionController } from './session-controller';
+import type { PrivateApiFactory } from '../api/private-api';
 
 export function SessionProvider({
   controller,
+  privateApi,
   children,
-}: PropsWithChildren<{ controller: SessionController }>) {
+}: PropsWithChildren<{ controller: SessionController; privateApi?: PrivateApiFactory }>) {
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
 
   useEffect(() => {
@@ -25,7 +27,7 @@ export function SessionProvider({
   }, [controller]);
 
   return (
-    <SessionContext.Provider value={{ state, controller }}>
+    <SessionContext.Provider value={{ state, controller, privateApi }}>
       <AuthFormActionsContext.Provider value={state.available ? controller : null}>
         {children}
       </AuthFormActionsContext.Provider>
