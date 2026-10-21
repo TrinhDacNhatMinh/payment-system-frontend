@@ -15,6 +15,7 @@ export type RequestOptions = {
   params?: Record<string, string | number | boolean | undefined>;
   signal?: AbortSignal;
   csrfToken?: string;
+  idempotencyKey?: string;
 };
 
 export interface ApiTransport {
@@ -69,6 +70,19 @@ export function createHttpClients(options: HttpClientOptions) {
         try {
           validatePath(request.path, request.method, auth);
           const headers: Record<string, string> = {};
+          if (request.idempotencyKey !== undefined) {
+            if (
+              auth ||
+              request.method !== 'POST' ||
+              request.path !== '/api/v1/transfer' ||
+              !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+                request.idempotencyKey,
+              )
+            ) {
+              throw new ApiError('client');
+            }
+            headers['Idempotency-Key'] = request.idempotencyKey;
+          }
           if (request.method !== 'GET' && request.method !== 'HEAD')
             headers['Content-Type'] = 'application/json';
           if (auth && request.method === 'POST') {

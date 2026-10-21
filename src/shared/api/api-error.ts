@@ -15,6 +15,18 @@ const kindMessages: Record<ApiErrorKind, string> = {
 
 const codeMessages: Record<string, string> = {
   VALIDATION_ERROR: 'Check the information you entered.',
+  WALLET_NOT_FOUND: 'Your wallet or a required wallet is unavailable.',
+  WALLET_INSUFFICIENT_BALANCE: 'There are insufficient funds for this transfer. Check your wallet.',
+  SELF_TRANSFER_NOT_ALLOWED: 'You cannot transfer money to yourself.',
+  RECIPIENT_NOT_FOUND: 'The recipient could not be found. Check the email address.',
+  RECIPIENT_LOCKED: 'The recipient account is locked and cannot receive this transfer.',
+  AMOUNT_OUT_OF_RANGE: 'Check the transfer amount and allowed limits.',
+  CONCURRENT_MODIFICATION: 'The wallet changed during processing. Check the transfer status.',
+  IDEMPOTENCY_KEY_INVALID: 'The transfer key is invalid. No new transfer should be submitted.',
+  IDEMPOTENCY_KEY_REUSED: 'This transfer key belongs to different transfer details.',
+  TRANSFER_IN_PROGRESS: 'This transfer is being processed. Check its status before continuing.',
+  TRANSFER_REQUEST_NOT_FOUND:
+    'The request is not visible yet. This does not confirm that the transfer failed.',
   INVALID_CREDENTIALS: 'Email or password is incorrect.',
   EMAIL_ALREADY_EXISTS: 'An account with this email already exists. Sign in instead.',
   ACCOUNT_LOCKED: 'Your account is locked. You cannot access your wallet at this time.',

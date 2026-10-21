@@ -8,6 +8,47 @@ import { createHttpClients } from './http-client';
 const baseUrl = 'http://localhost:8080';
 
 describe('HTTP client isolation', () => {
+  it.each([
+    {
+      method: 'GET',
+      path: '/api/v1/transfer',
+      idempotencyKey: '550e8400-e29b-41d4-a716-446655440000',
+    },
+    {
+      method: 'POST',
+      path: '/api/v1/payment/deposit',
+      idempotencyKey: '550e8400-e29b-41d4-a716-446655440000',
+    },
+    { method: 'POST', path: '/api/v1/transfer', idempotencyKey: 'bad\r\nAuthorization: secret' },
+  ] as const)(
+    'restricts idempotency headers to valid transfer submissions: $method $path',
+    async (request) => {
+      const adapter = createApiAdapter([]);
+      const { business } = createHttpClients({ baseUrl, getAccessToken: () => 'access', adapter });
+      await expect(business.request(request, z.unknown())).rejects.toMatchObject({
+        kind: 'client',
+      });
+      expect(adapter).not.toHaveBeenCalled();
+    },
+  );
+
+  it('does not send a transfer key through the cookie-auth client', async () => {
+    const adapter = createApiAdapter([]);
+    const { auth } = createHttpClients({ baseUrl, getAccessToken: () => null, adapter });
+    await expect(
+      auth.request(
+        {
+          method: 'POST',
+          path: '/api/v1/auth/login',
+          csrfToken: 'csrf',
+          idempotencyKey: '550e8400-e29b-41d4-a716-446655440000',
+        },
+        z.unknown(),
+      ),
+    ).rejects.toMatchObject({ kind: 'client' });
+    expect(adapter).not.toHaveBeenCalled();
+  });
+
   it('sends auth cookies/JSON CSRF without a bearer token or cookie-based XSRF lookup', async () => {
     const adapter = createApiAdapter([successReply('ok')]);
     const { auth } = createHttpClients({
