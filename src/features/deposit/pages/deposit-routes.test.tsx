@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   createMemoryHistory,
   createRootRoute,
@@ -21,13 +22,18 @@ import type { SessionController } from '@/features/auth/model/session-controller
 import { SessionProvider } from '@/features/auth/model/session-provider';
 import { RegisterPage } from '@/features/auth/pages/register-page';
 import { parsePaymentResultSearch } from '@/shared/lib/payment-result-context';
-import { successReply } from '@/test/api-adapter';
+import { errorReply, successReply } from '@/test/api-adapter';
 import { createSessionFixture, csrfReply, testSession } from '@/test/auth-session';
+import { depositKey, makeDepositOrder } from '../api/deposit-fixture.test-support';
+import { DEPOSIT_MARKER_KEY } from '../model/deposit-marker';
 import { DepositPage } from './deposit-page';
 import { PaymentResultPage } from './payment-result-page';
 
 const controllers: SessionController[] = [];
+const queryClients: QueryClient[] = [];
 beforeEach(() => {
+  vi.stubEnv('VITE_VNPAY_TMN_CODE', '');
+  window.sessionStorage.removeItem(DEPOSIT_MARKER_KEY);
   vi.stubGlobal('matchMedia', (media: string) => ({
     media,
     matches: false,
@@ -42,6 +48,9 @@ beforeEach(() => {
 
 afterEach(async () => {
   await Promise.all(controllers.splice(0).map((controller) => controller.stop()));
+  queryClients.splice(0).forEach((client) => client.clear());
+  window.sessionStorage.removeItem(DEPOSIT_MARKER_KEY);
+  vi.unstubAllEnvs();
 });
 
 function AppRouter({ router }: { router: AnyRouter }) {
@@ -51,6 +60,8 @@ function AppRouter({ router }: { router: AnyRouter }) {
 
 function renderApp(path: string, fixture: ReturnType<typeof createSessionFixture>) {
   controllers.push(fixture.controller);
+  const queryClient = new QueryClient();
+  queryClients.push(queryClient);
   const root = createRootRoute({ component: Outlet });
   const privateRoute = createRoute({
     getParentRoute: () => root,
@@ -99,11 +110,13 @@ function renderApp(path: string, fixture: ReturnType<typeof createSessionFixture
     defaultPreload: false,
   });
   render(
-    <ConfigProvider theme={{ token: { motion: false } }}>
-      <SessionProvider controller={fixture.controller} privateApi={fixture.privateApi}>
-        <AppRouter router={router} />
-      </SessionProvider>
-    </ConfigProvider>,
+    <QueryClientProvider client={queryClient}>
+      <ConfigProvider theme={{ token: { motion: false } }}>
+        <SessionProvider controller={fixture.controller} privateApi={fixture.privateApi}>
+          <AppRouter router={router} />
+        </SessionProvider>
+      </ConfigProvider>
+    </QueryClientProvider>,
   );
   return { router, privateLoader };
 }
@@ -115,6 +128,48 @@ function anonymous() {
 }
 
 describe('deposit and payment result route boundaries', () => {
+  it('sends one confirmed request and recovers by GET without opening the gateway on lookup', async () => {
+    vi.stubEnv('VITE_API_BASE_URL', 'http://localhost:8080');
+    vi.stubEnv('VITE_VNPAY_TMN_CODE', 'TESTCODE');
+    vi.stubEnv('VITE_VNPAY_RETURN_URL', '');
+    vi.spyOn(crypto, 'randomUUID').mockReturnValue(depositKey);
+    const fixture = createSessionFixture([
+      csrfReply(),
+      successReply(testSession),
+      errorReply('INTERNAL_SERVER_ERROR', 500),
+      successReply(makeDepositOrder()),
+    ]);
+    const { router } = renderApp('/deposit', fixture);
+    const input = await screen.findByLabelText(/^Amount/);
+    fireEvent.change(input, { target: { value: '50000' } });
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+    expect(fixture.adapter).toHaveBeenCalledTimes(2);
+    const pay = screen.getByRole('button', { name: 'Pay with VNPay' });
+    expect(pay).toBeEnabled();
+    fireEvent.click(pay);
+    fireEvent.click(pay);
+    const check = await screen.findByRole('button', { name: 'Check top-up request' });
+    expect(fixture.adapter).toHaveBeenCalledTimes(3);
+    expect(JSON.parse(window.sessionStorage.getItem(DEPOSIT_MARKER_KEY) ?? '{}')).toEqual({
+      userId: 1,
+      idempotencyKey: depositKey,
+    });
+    await user.click(check);
+    await screen.findByText('Payment verification is not available yet');
+    expect(router.state.location.pathname).toBe('/payment/result');
+    expect(router.state.location.search).toEqual({ orderId: makeDepositOrder().orderId });
+    expect(fixture.adapter.mock.calls.map(([config]) => config.url)).toEqual([
+      '/api/v1/auth/csrf',
+      '/api/v1/auth/refresh',
+      '/api/v1/payment/deposit',
+      `/api/v1/payment/deposit/requests/${depositKey}`,
+    ]);
+    const config = fixture.adapter.mock.calls[2]?.[0];
+    expect(config?.data).toBe('{"amount":50000}');
+    expect(config?.headers.get('Idempotency-Key')).toBe(depositKey);
+  });
+
   it('keeps a signed-out deposit URL private during navigation and preload', async () => {
     const fixture = anonymous();
     const { router, privateLoader } = renderApp('/deposit', fixture);

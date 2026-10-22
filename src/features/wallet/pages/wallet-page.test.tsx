@@ -11,7 +11,7 @@ import {
 } from '@tanstack/react-router';
 import { ConfigProvider } from 'antd';
 import { AxiosError, type AxiosAdapter } from 'axios';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SessionProvider } from '@/features/auth/model/session-provider';
 import type { SessionController } from '@/features/auth/model/session-controller';
@@ -23,6 +23,9 @@ import { WalletPage } from './wallet-page';
 
 const controllers: SessionController[] = [];
 const clients: QueryClient[] = [];
+beforeEach(() => {
+  vi.stubEnv('VITE_VNPAY_TMN_CODE', '');
+});
 const wallet = {
   id: 7,
   userId: testSession.user.id,
@@ -79,6 +82,7 @@ function renderWallet(replies: ApiReply[], adapter?: AxiosAdapter) {
 afterEach(async () => {
   await Promise.all(controllers.splice(0).map((controller) => controller.stop()));
   for (const client of clients.splice(0)) client.clear();
+  vi.unstubAllEnvs();
 });
 
 describe('wallet page with session-bound API', () => {

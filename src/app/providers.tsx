@@ -7,6 +7,10 @@ import { createTheme } from '@/shared/theme/theme';
 import { useMediaQuery } from '@/shared/lib/use-media-query';
 import { SessionProvider } from '@/features/auth/model/session-provider';
 import {
+  bindDepositMarkerCleanup,
+  createDepositMarkerStore,
+} from '@/features/deposit/model/deposit-marker';
+import {
   bindTransferMarkerCleanup,
   createTransferMarkerStore,
 } from '@/features/transfer/model/transfer-marker';
@@ -18,6 +22,10 @@ export function AppProviders({ children }: PropsWithChildren) {
   const [session] = useState(createAppSession);
   useEffect(
     () => bindTransferMarkerCleanup(session.controller, createTransferMarkerStore()),
+    [session],
+  );
+  useEffect(
+    () => bindDepositMarkerCleanup(session.controller, createDepositMarkerStore()),
     [session],
   );
 

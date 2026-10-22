@@ -11,14 +11,20 @@ function getAmountError(value: string) {
   return result.success ? undefined : result.error.issues[0]?.message;
 }
 
-export function DepositForm() {
+export function DepositForm({
+  submit,
+  initialAmount = '',
+}: {
+  submit?: (amount: number) => Promise<void>;
+  initialAmount?: string;
+}) {
   const id = useId();
   const input = useRef<HTMLInputElement | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const [reviewAmount, setReviewAmount] = useState<number | null>(null);
   const [focusRequest, setFocusRequest] = useState(0);
   const form = useForm({
-    defaultValues: { amount: '' },
+    defaultValues: { amount: initialAmount },
     canSubmitWhenInvalid: true,
     onSubmitInvalid: () => setFocusRequest((request) => request + 1),
     onSubmit: ({ value }) => {
@@ -50,7 +56,7 @@ export function DepositForm() {
             <dd>VNPay sandbox</dd>
           </div>
         </dl>
-        <p className="transfer-field-hint">Payment is not available yet.</p>
+        {!submit && <p className="transfer-field-hint">Payment is not available yet.</p>}
         <div className="transfer-actions">
           <Button
             htmlType="button"
@@ -61,7 +67,14 @@ export function DepositForm() {
           >
             Go back
           </Button>
-          <Button type="primary" htmlType="button" disabled>
+          <Button
+            type="primary"
+            htmlType="button"
+            disabled={!submit}
+            onClick={() => {
+              if (submit) void submit(reviewAmount);
+            }}
+          >
             Pay with VNPay
           </Button>
         </div>

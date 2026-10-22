@@ -326,6 +326,9 @@ body {
 .deposit-method {
   margin-bottom: 24px;
 }
+.deposit-feedback {
+  margin-bottom: 24px;
+}
 .wallet-transfer-link {
   display: inline-flex;
   align-items: center;
