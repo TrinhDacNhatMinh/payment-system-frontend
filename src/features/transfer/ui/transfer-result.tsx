@@ -9,9 +9,17 @@ import type { TransferSubmissionState } from '../model/transfer-submission';
 export function TransferResult({
   state,
   checkStatus,
+  reviewResume,
+  cancelResume,
+  resume,
+  newTransfer,
 }: {
   state: TransferSubmissionState;
   checkStatus: () => Promise<void>;
+  reviewResume: () => void;
+  cancelResume: () => void;
+  resume: () => Promise<void>;
+  newTransfer: () => void;
 }) {
   const id = useId();
   const heading = useRef<HTMLHeadingElement>(null);
@@ -25,6 +33,45 @@ export function TransferResult({
   );
 
   if (state.status === 'idle') return null;
+  if (state.status === 'resume-review')
+    return (
+      <section className="transfer-review" aria-labelledby={id}>
+        <h2 id={id} ref={heading} tabIndex={-1}>
+          Review pending transfer
+        </h2>
+        <p>This continues your earlier transfer. Review the details before confirming.</p>
+        <dl className="transfer-summary">
+          <div>
+            <dt>To</dt>
+            <dd>{state.payload.toEmail}</dd>
+          </div>
+          <div>
+            <dt>Amount</dt>
+            <dd className="transfer-review-amount">{formatReceiptMoney(state.payload.amount)}</dd>
+          </div>
+          {state.payload.description?.trim() && (
+            <div>
+              <dt>Message</dt>
+              <dd className="transfer-description">{state.payload.description}</dd>
+            </div>
+          )}
+        </dl>
+        <div className="transfer-actions">
+          <Button htmlType="button" onClick={cancelResume}>
+            Go back
+          </Button>
+          <Button
+            htmlType="button"
+            type="primary"
+            onClick={() => {
+              void resume();
+            }}
+          >
+            Confirm and resume
+          </Button>
+        </div>
+      </section>
+    );
   if (
     state.status === 'initializing' ||
     state.status === 'submitting' ||
@@ -88,7 +135,15 @@ export function TransferResult({
             title="Historical transfer: fractional amounts are shown exactly."
           />
         )}
-        <div className="transfer-actions">{back}</div>
+        {state.restartError && (
+          <Alert type="warning" showIcon role="alert" title={state.restartError} />
+        )}
+        <div className="transfer-actions">
+          {back}
+          <Button htmlType="button" onClick={newTransfer}>
+            Make another transfer
+          </Button>
+        </div>
       </section>
     );
   return (
@@ -106,6 +161,27 @@ export function TransferResult({
         role="alert"
         title={state.message}
       />
+      {state.status === 'unknown' && state.readOnlyDetails && (
+        <dl className="transfer-summary transfer-recovery-details">
+          <div>
+            <dt>To</dt>
+            <dd>{state.readOnlyDetails.toEmail}</dd>
+          </div>
+          <div>
+            <dt>Amount</dt>
+            <dd>{formatReceiptMoney(state.readOnlyDetails.amount)}</dd>
+          </div>
+          {state.readOnlyDetails.description?.trim() && (
+            <div>
+              <dt>Message</dt>
+              <dd className="transfer-description">{state.readOnlyDetails.description}</dd>
+            </div>
+          )}
+        </dl>
+      )}
+      {state.status === 'rejected' && state.restartError && (
+        <Alert type="warning" showIcon role="alert" title={state.restartError} />
+      )}
       <div className="transfer-actions">
         {back}
         {state.status === 'unknown' && (
@@ -117,6 +193,16 @@ export function TransferResult({
             }}
           >
             Check transfer status
+          </Button>
+        )}
+        {state.status === 'unknown' && state.recovery && (
+          <Button htmlType="button" onClick={reviewResume}>
+            Review and resume transfer
+          </Button>
+        )}
+        {state.status === 'rejected' && (
+          <Button htmlType="button" type="primary" onClick={newTransfer}>
+            Edit transfer details
           </Button>
         )}
       </div>

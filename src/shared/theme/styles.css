@@ -475,6 +475,9 @@ body {
   margin: 0;
   overflow-wrap: anywhere;
 }
+.transfer-recovery-details {
+  margin-top: 24px;
+}
 .transfer-review-amount {
   font-size: 24px;
   font-weight: 700;

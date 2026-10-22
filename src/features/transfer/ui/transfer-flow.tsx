@@ -25,9 +25,20 @@ export function TransferFlow(props: {
     <Card className="transfer-card">
       <div hidden={operation.state.status === 'success'}>{balance}</div>
       {operation.state.status === 'idle' ? (
-        <TransferForm submit={operation.submit} />
+        <TransferForm
+          submit={operation.submit}
+          initialValues={operation.state.draft}
+          focusInput={operation.state.focusInput}
+        />
       ) : (
-        <TransferResult state={operation.state} checkStatus={operation.checkStatus} />
+        <TransferResult
+          state={operation.state}
+          checkStatus={operation.checkStatus}
+          reviewResume={operation.reviewResume}
+          cancelResume={operation.cancelResume}
+          resume={operation.resume}
+          newTransfer={operation.newTransfer}
+        />
       )}
     </Card>
   );

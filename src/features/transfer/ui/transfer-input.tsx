@@ -30,8 +30,11 @@ export function TransferInput(props: TransferInputProps) {
     value: props.value ?? '',
     disabled: props.disabled,
     onBlur: props.onBlur,
-    onChange: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
-      props.onChange(event.target.value),
+    onChange: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+      const value = event.target.value;
+      if (props.name === 'amount' && !/^\d*$/.test(value)) return;
+      props.onChange(props.name === 'description' ? value.slice(0, 255) : value);
+    },
     required: props.name !== 'description',
     'aria-invalid': Boolean(message),
     'aria-describedby': message ? helpId : undefined,
@@ -45,7 +48,7 @@ export function TransferInput(props: TransferInputProps) {
         {props.name !== 'description' && <span aria-hidden="true"> *</span>}
       </label>
       {props.name === 'description' ? (
-        <Input.TextArea {...control} autoSize={{ minRows: 3, maxRows: 6 }} />
+        <Input.TextArea {...control} maxLength={255} autoSize={{ minRows: 3, maxRows: 6 }} />
       ) : (
         <Input
           {...control}

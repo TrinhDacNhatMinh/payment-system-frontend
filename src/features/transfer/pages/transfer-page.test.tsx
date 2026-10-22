@@ -99,6 +99,189 @@ afterEach(async () => {
 });
 
 describe('transfer entry and review', () => {
+  it('edits a declined transfer and requires Continue and Confirm again before creating a new intent', async () => {
+    const fixture = renderTransfer([
+      errorReply('WALLET_INSUFFICIENT_BALANCE', 400),
+      successReply({
+        transactionId: 101,
+        amount: '2000',
+        fromWalletBalance: '998000',
+        status: 'SUCCESS',
+        createdAt: '2026-10-21T14:30:00',
+      }),
+      successReply({ ...wallet, balance: 998000 }),
+    ]);
+    await screen.findByRole('form', { name: 'Transfer details' });
+    fillDetails('1000', '  lunch  ');
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+    await user.click(await screen.findByRole('button', { name: 'Confirm transfer' }));
+    await screen.findByRole('heading', { name: 'Transfer declined' });
+    expect(createTransferMarkerStore().read()).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Edit transfer details' }));
+    expect(await screen.findByLabelText(/^Recipient email/)).toHaveValue('Recipient@example.com');
+    expect(screen.getByLabelText(/^Recipient email/)).toHaveFocus();
+    expect(screen.getByLabelText(/^Amount/)).toHaveValue('1000');
+    expect(screen.getByLabelText(/^Description/)).toHaveValue('  lunch  ');
+    fireEvent.change(screen.getByLabelText(/^Amount/), { target: { value: '2000' } });
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+    const posts = () =>
+      fixture.adapter.mock.calls
+        .map(([config]) => config)
+        .filter((config) => config.url === '/api/v1/transfer');
+    expect(posts()).toHaveLength(1);
+    await user.click(await screen.findByRole('button', { name: 'Confirm transfer' }));
+    await screen.findByRole('heading', { name: 'Transfer successful' });
+    expect(posts()).toHaveLength(2);
+    expect(posts()[1]?.headers.get('Idempotency-Key')).not.toBe(
+      posts()[0]?.headers.get('Idempotency-Key'),
+    );
+    await user.click(screen.getByRole('button', { name: 'Make another transfer' }));
+    expect(await screen.findByLabelText(/^Recipient email/)).toHaveValue('');
+    expect(screen.getByLabelText(/^Recipient email/)).toHaveFocus();
+    expect(screen.getByLabelText(/^Amount/)).toHaveValue('');
+    expect(createTransferMarkerStore().read()).toBeNull();
+    expect(posts()).toHaveLength(2);
+  });
+
+  it('recovers PENDING after reload using GET, rechecks the wallet and requires review before resuming', async () => {
+    const key = '550e8400-e29b-41d4-a716-446655440000';
+    createTransferMarkerStore().save({ userId: 1, idempotencyKey: key });
+    const request = { toEmail: 'Other@example.com', amount: '1000', description: '  lunch  ' };
+    const fixture = renderTransfer([
+      successReply({
+        idempotencyKey: key,
+        state: 'PENDING',
+        request,
+        result: null,
+        error: null,
+        legacyFractional: false,
+      }),
+      successReply(wallet),
+      successReply({
+        transactionId: 102,
+        amount: '1000',
+        fromWalletBalance: '999000',
+        status: 'SUCCESS',
+        createdAt: '2026-10-21T14:30:00',
+      }),
+      successReply({ ...wallet, balance: 999000 }),
+    ]);
+    const user = userEvent.setup();
+    await screen.findByRole('heading', { name: 'Transfer outcome is unknown' });
+    await screen.findByLabelText('Available balance: 1,000,000 VND');
+    await user.click(screen.getByRole('button', { name: 'Check transfer status' }));
+    const review = await screen.findByRole('button', { name: 'Review and resume transfer' });
+    expect(
+      fixture.adapter.mock.calls.filter(([config]) => config.url === '/api/v1/transfer'),
+    ).toHaveLength(0);
+    await user.click(review);
+    const heading = await screen.findByRole('heading', { name: 'Review pending transfer' });
+    expect(heading).toHaveFocus();
+    expect(screen.getByText('Other@example.com')).toBeVisible();
+    expect(screen.getByText('1,000 VND')).toBeVisible();
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Go back' }));
+    await user.click(screen.getByRole('button', { name: 'Review and resume transfer' }));
+    const confirm = screen.getByRole('button', { name: 'Confirm and resume' });
+    fireEvent.click(confirm);
+    fireEvent.click(confirm);
+    await screen.findByRole('heading', { name: 'Transfer successful' });
+    const posts = fixture.adapter.mock.calls
+      .map(([config]) => config)
+      .filter((config) => config.url === '/api/v1/transfer');
+    expect(posts).toHaveLength(1);
+    expect(posts[0]?.headers.get('Idempotency-Key')).toBe(key);
+    expect(posts[0]?.data).toBe(JSON.stringify(request));
+  });
+
+  it.each([
+    { amount: '1000.50', display: '1,000.50 VND', legacyFractional: true },
+    { amount: '50000001', display: '50,000,001 VND', legacyFractional: false },
+  ])(
+    'keeps pending amount $amount read-only instead of resuming outside the current contract',
+    async ({ amount, display, legacyFractional }) => {
+      const key = '550e8400-e29b-41d4-a716-446655440000';
+      createTransferMarkerStore().save({ userId: 1, idempotencyKey: key });
+      const fixture = renderTransfer([
+        successReply({
+          idempotencyKey: key,
+          state: 'PENDING',
+          request: { toEmail: 'Other@example.com', amount, description: null },
+          result: null,
+          error: null,
+          legacyFractional,
+        }),
+      ]);
+      await screen.findByRole('heading', { name: 'Transfer outcome is unknown' });
+      await screen.findByLabelText('Available balance: 1,000,000 VND');
+      await userEvent.setup().click(screen.getByRole('button', { name: 'Check transfer status' }));
+      expect(await screen.findByText(display)).toBeVisible();
+      expect(
+        screen.queryByRole('button', { name: 'Review and resume transfer' }),
+      ).not.toBeInTheDocument();
+      expect(
+        fixture.adapter.mock.calls.filter(([config]) => config.url === '/api/v1/transfer'),
+      ).toHaveLength(0);
+      expect(createTransferMarkerStore().read()?.idempotencyKey).toBe(key);
+    },
+  );
+
+  it('does not invent missing details or enable a new transfer after reload and lookup 404', async () => {
+    const key = '550e8400-e29b-41d4-a716-446655440000';
+    createTransferMarkerStore().save({ userId: 1, idempotencyKey: key });
+    const fixture = renderTransfer([errorReply('TRANSFER_REQUEST_NOT_FOUND', 404)]);
+    await screen.findByRole('heading', { name: 'Transfer outcome is unknown' });
+    await screen.findByLabelText('Available balance: 1,000,000 VND');
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Check transfer status' }));
+    await screen.findByText(/details are no longer available/);
+    expect(
+      screen.queryByRole('button', { name: 'Review and resume transfer' }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Make another transfer' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('form', { name: 'Transfer details' })).not.toBeInTheDocument();
+    expect(createTransferMarkerStore().read()?.idempotencyKey).toBe(key);
+    expect(
+      fixture.adapter.mock.calls.filter(([config]) => config.url === '/api/v1/transfer'),
+    ).toHaveLength(0);
+  });
+
+  it('renews an expired session through a user-requested status GET without replaying the POST', async () => {
+    const fixture = renderTransfer([
+      errorReply('TOKEN_EXPIRED', 401),
+      errorReply('TOKEN_EXPIRED', 401),
+      csrfReply(),
+      successReply({ ...testSession, accessToken: 'renewed' }),
+      errorReply('TRANSFER_REQUEST_NOT_FOUND', 404),
+      successReply(wallet),
+    ]);
+    await screen.findByRole('form', { name: 'Transfer details' });
+    fillDetails();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+    await user.click(await screen.findByRole('button', { name: 'Confirm transfer' }));
+    await screen.findByRole('heading', { name: 'Transfer outcome is unknown' });
+    expect(
+      fixture.adapter.mock.calls.filter(([config]) => config.url === '/api/v1/auth/refresh'),
+    ).toHaveLength(1);
+    const marker = createTransferMarkerStore().read();
+    await user.click(screen.getByRole('button', { name: 'Check transfer status' }));
+    await screen.findByText(/does not confirm/);
+    expect(
+      fixture.adapter.mock.calls.filter(([config]) => config.url === '/api/v1/auth/refresh'),
+    ).toHaveLength(2);
+    expect(
+      fixture.adapter.mock.calls.filter(
+        ([config]) => config.url === `/api/v1/transfer/requests/${marker?.idempotencyKey}`,
+      ),
+    ).toHaveLength(2);
+    expect(
+      fixture.adapter.mock.calls.filter(([config]) => config.url === '/api/v1/transfer'),
+    ).toHaveLength(1);
+    expect(createTransferMarkerStore().read()).toEqual(marker);
+    expect(fixture.controller.getAccessToken()).toBe('renewed');
+  });
+
   it('sends one confirmed POST, displays the receipt and fetches a fresh wallet snapshot', async () => {
     const receipt = {
       transactionId: 91,
@@ -245,6 +428,7 @@ describe('transfer entry and review', () => {
     const fixture = renderTransfer([
       new AxiosError('private payload', 'ECONNABORTED'),
       errorReply('TRANSFER_REQUEST_NOT_FOUND', 404),
+      successReply(wallet),
     ]);
     await screen.findByRole('form', { name: 'Transfer details' });
     fillDetails();
@@ -371,9 +555,9 @@ describe('transfer entry and review', () => {
   it('validates on blur and clears an existing error as the input is corrected', async () => {
     renderTransfer();
     const amount = await screen.findByLabelText(/^Amount/);
-    fireEvent.change(amount, { target: { value: '1000.50' } });
+    fireEvent.change(amount, { target: { value: '999' } });
     fireEvent.blur(amount);
-    await screen.findByText('Enter a whole VND amount from 1,000 to 50,000,000.');
+    await waitFor(() => expect(amount).toHaveAttribute('aria-invalid', 'true'));
     fireEvent.change(amount, { target: { value: '1000' } });
     await waitFor(() => expect(amount).toHaveAttribute('aria-invalid', 'false'));
     expect(
@@ -381,7 +565,7 @@ describe('transfer entry and review', () => {
     ).not.toBeInTheDocument();
   });
 
-  it.each(['999', '50000001', '1000.00', '1e3', '1,000'])(
+  it.each(['999', '50000001'])(
     'keeps invalid amount %s editable instead of rounding or opening review',
     async (amount) => {
       const fixture = renderTransfer();
@@ -395,14 +579,32 @@ describe('transfer entry and review', () => {
     },
   );
 
-  it('focuses a description longer than 255 characters without truncating it', async () => {
+  it.each(['1000.00', '1e3', '1,000', '-1000', '+1000', 'abc', ' 1000 '])(
+    'rejects non-digit amount input %s without changing the existing amount',
+    async (value) => {
+      renderTransfer();
+      const amount = await screen.findByLabelText(/^Amount/);
+      fireEvent.change(amount, { target: { value: '2000' } });
+      fireEvent.change(amount, { target: { value } });
+      expect(amount).toHaveValue('2000');
+      fireEvent.change(amount, { target: { value: '' } });
+      expect(amount).toHaveValue('');
+    },
+  );
+
+  it('limits description input to 255 characters, including pasted text', async () => {
     renderTransfer();
     await screen.findByRole('form', { name: 'Transfer details' });
-    fillDetails('1000', 'x'.repeat(256));
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Continue' }));
-    await screen.findByText('Use at most 255 characters for the description.');
-    await waitFor(() => expect(screen.getByLabelText(/^Description/)).toHaveFocus());
-    expect(screen.getByLabelText(/^Description/)).toHaveValue('x'.repeat(256));
+    const description = screen.getByLabelText(/^Description/);
+    expect(description).toHaveAttribute('maxlength', '255');
+    const user = userEvent.setup();
+    await user.click(description);
+    await user.paste('x'.repeat(256));
+    expect(description).toHaveValue('x'.repeat(255));
+    await user.keyboard('y');
+    expect(description).toHaveValue('x'.repeat(255));
+    fireEvent.change(description, { target: { value: 'z'.repeat(256) } });
+    expect(description).toHaveValue('z'.repeat(255));
   });
 
   it('reviews exact values, preserves the draft on edit and requires reviewing changes again', async () => {

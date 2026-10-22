@@ -16,14 +16,24 @@ import { TransferInput } from './transfer-input';
 const FIELD_NAMES = ['toEmail', 'amount', 'description'] as const;
 const EMPTY_DRAFT: TransferDraft = { toEmail: '', amount: '', description: null };
 
-export function TransferForm({ submit }: { submit: (review: TransferReview) => Promise<void> }) {
+export function TransferForm({
+  submit,
+  initialValues,
+  focusInput = false,
+}: {
+  submit: (review: TransferReview) => Promise<void>;
+  initialValues?: TransferDraft;
+  focusInput?: boolean;
+}) {
   const id = useId();
   const element = useRef<HTMLFormElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const [review, setReview] = useState<TransferReview | null>(null);
-  const [focusRequest, setFocusRequest] = useState<{ name: TransferFieldName } | null>(null);
+  const [focusRequest, setFocusRequest] = useState<{ name: TransferFieldName } | null>(
+    focusInput ? { name: 'toEmail' } : null,
+  );
   const form = useForm({
-    defaultValues: EMPTY_DRAFT,
+    defaultValues: initialValues ?? EMPTY_DRAFT,
     canSubmitWhenInvalid: true,
     onSubmitInvalid: ({ formApi }) => {
       const invalid = FIELD_NAMES.find((name) => formApi.getFieldMeta(name)?.errors.length);

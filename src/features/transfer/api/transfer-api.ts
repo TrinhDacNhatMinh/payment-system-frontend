@@ -17,7 +17,7 @@ function parseKey(value: string) {
 }
 
 // The caller supplies an existing reviewed intent/key. Generating or persisting
-// keys, resuming an intent and deciding when to submit belong to later items.
+// keys, resuming an intent and deciding when to submit belong to the flow controller.
 export function createTransferApi(privateApi: PrivateApiFactory, access: SessionAccess) {
   const api = privateApi(access);
   return {

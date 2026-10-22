@@ -65,5 +65,13 @@ export function useTransferSubmission(options: {
     return operation.stop;
   }, [operation]);
   const state = useSyncExternalStore(operation.subscribe, operation.getSnapshot);
-  return { state, submit: operation.submit, checkStatus: operation.checkStatus };
+  return {
+    state,
+    submit: operation.submit,
+    checkStatus: operation.checkStatus,
+    reviewResume: operation.reviewResume,
+    cancelResume: operation.cancelResume,
+    resume: operation.resume,
+    newTransfer: operation.newTransfer,
+  };
 }
