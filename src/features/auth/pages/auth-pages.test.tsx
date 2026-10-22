@@ -11,6 +11,8 @@ import {
 import { ConfigProvider } from 'antd';
 import { describe, expect, it, vi } from 'vitest';
 
+import { parsePaymentResultSearch } from '@/shared/lib/payment-result-context';
+
 import { AuthFormActionsProvider } from '../model/auth-form-actions-provider';
 import type { AuthFormActions } from '../model/auth-form-actions';
 import { RegisterPage } from './register-page';
@@ -24,7 +26,10 @@ const registeredUser = {
   status: 'ACTIVE',
 } as const;
 
-async function renderPages(path: '/wallet' | '/transfer' | '/register', actions: AuthFormActions) {
+async function renderPages(
+  path: '/wallet' | '/transfer' | '/deposit' | '/register' | `/payment/result?orderId=${string}`,
+  actions: AuthFormActions,
+) {
   const root = createRootRoute({ component: Outlet });
   const routes = [
     createRoute({ getParentRoute: () => root, path: '/login', component: SignInPage }),
@@ -37,6 +42,17 @@ async function renderPages(path: '/wallet' | '/transfer' | '/register', actions:
     createRoute({
       getParentRoute: () => root,
       path: '/transfer',
+      component: () => <SignInPage embedded />,
+    }),
+    createRoute({
+      getParentRoute: () => root,
+      path: '/deposit',
+      component: () => <SignInPage embedded />,
+    }),
+    createRoute({
+      getParentRoute: () => root,
+      path: '/payment/result',
+      validateSearch: parsePaymentResultSearch,
       component: () => <SignInPage embedded />,
     }),
   ];
@@ -56,7 +72,7 @@ async function renderPages(path: '/wallet' | '/transfer' | '/register', actions:
 }
 
 describe('registration navigation', () => {
-  it.each(['/wallet', '/transfer'] as const)(
+  it.each(['/wallet', '/transfer', '/deposit', '/payment/result?orderId=VNPAY_1'] as const)(
     'preserves %s through registration without logging in',
     async (path) => {
       const login = vi.fn().mockResolvedValue(undefined);
@@ -80,7 +96,8 @@ describe('registration navigation', () => {
       expect(screen.getByRole('link', { name: 'Go to sign in' })).toHaveAttribute('href', path);
       expect(router.state.location.searchStr).toBe('');
       await userEvent.setup().click(screen.getByRole('link', { name: 'Go to sign in' }));
-      await waitFor(() => expect(router.state.location.pathname).toBe(path));
+      await waitFor(() => expect(router.state.location.pathname).toBe(path.split('?')[0]));
+      expect(router.state.location.searchStr).toBe(path.includes('?') ? '?orderId=VNPAY_1' : '');
       expect(login).not.toHaveBeenCalled();
     },
   );

@@ -67,8 +67,9 @@ async function renderLayout(component: () => ReactNode) {
   });
   const wallet = createRoute({ getParentRoute: () => root, path: '/wallet' });
   const transfer = createRoute({ getParentRoute: () => root, path: '/transfer' });
+  const deposit = createRoute({ getParentRoute: () => root, path: '/deposit' });
   const router = createRouter({
-    routeTree: root.addChildren([wallet, transfer]),
+    routeTree: root.addChildren([wallet, transfer, deposit]),
     history: createMemoryHistory({ initialEntries: ['/wallet'] }),
   });
   await act(() => router.load());
@@ -77,6 +78,33 @@ async function renderLayout(component: () => ReactNode) {
 }
 
 describe('application navigation', () => {
+  it.each([390, 1200])('opens Top up and marks it active at width %s', async (width) => {
+    viewportWidth = width;
+    const router = await renderLayout(() => (
+      <AppLayout>
+        <h1>Page content</h1>
+      </AppLayout>
+    ));
+    const user = userEvent.setup();
+    if (width <= 700) await user.click(screen.getByRole('button', { name: 'Open menu' }));
+    const link = await screen.findByRole('link', { name: 'Top up' });
+    expect(link).toHaveAttribute('href', '/deposit');
+    await user.click(link);
+    await waitFor(() => expect(router.state.location.pathname).toBe('/deposit'));
+    if (width <= 700) {
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      await user.click(screen.getByRole('button', { name: 'Open menu' }));
+    }
+    expect(await screen.findByRole('link', { name: 'Top up' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+    expect(screen.getByRole('link', { name: 'Wallet' })).not.toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+  });
+
   it.each([390, 1200])('navigates to Transfer and marks it active at %spx', async (width) => {
     viewportWidth = width;
     const user = userEvent.setup();
@@ -124,7 +152,11 @@ describe('application navigation', () => {
       'href',
       '/transfer',
     );
-    for (const name of [/Top up/, /Transactions/]) {
+    expect(within(dialog).getByRole('link', { name: 'Top up' })).toHaveAttribute(
+      'href',
+      '/deposit',
+    );
+    for (const name of [/Transactions/]) {
       expect(within(dialog).queryByRole('button', { name })).not.toBeInTheDocument();
       expect(within(dialog).queryByRole('link', { name })).not.toBeInTheDocument();
     }

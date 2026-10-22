@@ -9,6 +9,8 @@ export default defineConfig({
   },
   test: {
     environment: 'jsdom',
+    // Bound concurrent jsdom/Ant Design renders to avoid resource-related timeouts.
+    maxWorkers: 2,
     setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.test.{ts,tsx}'],
     clearMocks: true,

@@ -14,6 +14,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { createApiAdapter, errorReply, successReply } from '@/test/api-adapter';
 import { createSessionFixture, csrfReply, testSession } from '@/test/auth-session';
+import { parsePaymentResultSearch } from '@/shared/lib/payment-result-context';
 import type { SessionController } from '../model/session-controller';
 import { SessionProvider } from '../model/session-provider';
 import { SignInPage } from './sign-in-page';
@@ -46,7 +47,23 @@ async function renderLogin(fixture: ReturnType<typeof createSessionFixture>, ret
   const history = createMemoryHistory({ initialEntries: ['/register', '/login'] });
   history.replace('/login', { authReturnTo: returnTo });
   const router = createRouter({
-    routeTree: root.addChildren([login, wallet, register, transfer]),
+    routeTree: root.addChildren([
+      login,
+      wallet,
+      register,
+      transfer,
+      createRoute({
+        getParentRoute: () => root,
+        path: '/deposit',
+        component: () => <h1>Top up destination</h1>,
+      }),
+      createRoute({
+        getParentRoute: () => root,
+        path: '/payment/result',
+        validateSearch: parsePaymentResultSearch,
+        component: () => <h1>Payment result destination</h1>,
+      }),
+    ]),
     history,
   });
   await act(() => router.load());
@@ -61,6 +78,26 @@ async function renderLogin(fixture: ReturnType<typeof createSessionFixture>, ret
 }
 
 describe('public sign-in session handling', () => {
+  it.each([
+    { target: '/deposit', heading: 'Top up destination', path: '/deposit', search: {} },
+    {
+      target: '/payment/result?orderId=VNPAY_1',
+      heading: 'Payment result destination',
+      path: '/payment/result',
+      search: { orderId: 'VNPAY_1' },
+    },
+  ])(
+    'returns a verified public login to $target without starting a top-up',
+    async ({ target, heading, path, search }) => {
+      const fixture = createSessionFixture([csrfReply(), successReply(testSession)]);
+      const { router } = await renderLogin(fixture, target);
+      await screen.findByRole('heading', { name: heading });
+      expect(router.state.location.pathname).toBe(path);
+      expect(router.state.location.search).toEqual(search);
+      expect(fixture.adapter).toHaveBeenCalledTimes(2);
+    },
+  );
+
   it('returns an authenticated login page to the allowlisted transfer destination', async () => {
     const fixture = createSessionFixture([csrfReply(), successReply(testSession)]);
     const { router } = await renderLogin(fixture, '/transfer');

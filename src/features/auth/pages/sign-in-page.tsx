@@ -4,8 +4,9 @@ import { Alert } from 'antd';
 
 import { AuthLayout } from '@/app/layouts/auth-layout';
 import { ContentState } from '@/shared/ui/content-state';
+import { getPaymentResultReturnTo } from '@/shared/lib/payment-result-context';
 import { useAuthFormActions } from '../model/auth-form-actions';
-import { getAuthReturnTo } from '../model/auth-navigation';
+import { getAuthNavigationTarget, getAuthReturnTo } from '../model/auth-navigation';
 import { useAuthSession } from '../model/session-context';
 import { AuthForm } from '../ui/auth-form';
 import { SessionNotice } from '../ui/session-notice';
@@ -15,7 +16,13 @@ export function SignInPage({ embedded = false }: { embedded?: boolean }) {
   const session = useAuthSession();
   const location = useLocation();
   const navigate = useNavigate();
-  const returnTo = getAuthReturnTo(embedded ? location.pathname : location.state.authReturnTo);
+  const returnTo = getAuthReturnTo(
+    embedded
+      ? location.pathname === '/payment/result'
+        ? getPaymentResultReturnTo(location.search)
+        : location.pathname
+      : location.state.authReturnTo,
+  );
   const controller = session?.controller;
   const status = session?.state.status;
 
@@ -26,7 +33,7 @@ export function SignInPage({ embedded = false }: { embedded?: boolean }) {
       status === 'authenticated' &&
       controller?.getAccessIdentity()
     ) {
-      void navigate({ to: returnTo ?? '/wallet', replace: true });
+      void navigate({ ...getAuthNavigationTarget(returnTo), replace: true });
     }
   }, [embedded, location.pathname, status, controller, returnTo, navigate]);
 
@@ -66,7 +73,8 @@ export function SignInPage({ embedded = false }: { embedded?: boolean }) {
             : undefined
         }
         onSuccess={() => {
-          if (!embedded && !session) void navigate({ to: returnTo ?? '/wallet', replace: true });
+          if (!embedded && !session)
+            void navigate({ ...getAuthNavigationTarget(returnTo), replace: true });
         }}
       />
     </AuthLayout>

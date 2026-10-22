@@ -1,6 +1,11 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { EyeInvisibleOutlined, EyeOutlined, SwapOutlined } from '@ant-design/icons';
+import {
+  EyeInvisibleOutlined,
+  EyeOutlined,
+  PlusCircleOutlined,
+  SwapOutlined,
+} from '@ant-design/icons';
 import { Link } from '@tanstack/react-router';
 import { Alert, Button, Card, Spin } from 'antd';
 
@@ -137,9 +142,14 @@ function WalletContent({
             )}
           </Card>
         )}
-        <Link to="/transfer" preload={false} className="wallet-transfer-link">
-          <SwapOutlined aria-hidden="true" /> Transfer
-        </Link>
+        <div className="wallet-actions">
+          <Link to="/transfer" preload={false} className="wallet-transfer-link">
+            <SwapOutlined aria-hidden="true" /> Transfer
+          </Link>
+          <Link to="/deposit" preload={false} className="wallet-transfer-link">
+            <PlusCircleOutlined aria-hidden="true" /> Top up
+          </Link>
+        </div>
       </div>
     </div>
   );

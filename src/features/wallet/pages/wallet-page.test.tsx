@@ -16,6 +16,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { SessionProvider } from '@/features/auth/model/session-provider';
 import type { SessionController } from '@/features/auth/model/session-controller';
 import { TransferPage } from '@/features/transfer/pages/transfer-page';
+import { DepositPage } from '@/features/deposit/pages/deposit-page';
 import { createApiAdapter, errorReply, successReply, type ApiReply } from '@/test/api-adapter';
 import { createSessionFixture, csrfReply, testSession } from '@/test/auth-session';
 import { WalletPage } from './wallet-page';
@@ -63,7 +64,11 @@ function renderWallet(replies: ApiReply[], adapter?: AxiosAdapter) {
     component: TransferPage,
   });
   const router = createRouter({
-    routeTree: root.addChildren([walletRoute, transferRoute]),
+    routeTree: root.addChildren([
+      walletRoute,
+      transferRoute,
+      createRoute({ getParentRoute: () => root, path: '/deposit', component: DepositPage }),
+    ]),
     history: createMemoryHistory({ initialEntries: ['/wallet'] }),
     defaultPreload: false,
   });
@@ -77,6 +82,20 @@ afterEach(async () => {
 });
 
 describe('wallet page with session-bound API', () => {
+  it('opens Top up from the wallet without creating or looking up an order', async () => {
+    const fixture = renderWallet([successReply(wallet)]);
+    await screen.findByLabelText('Available balance: 12,000 VND');
+    await userEvent.setup().click(screen.getByRole('link', { name: 'Top up' }));
+    await screen.findByRole('heading', { name: 'Top up' });
+    expect(fixture.router.state.location.pathname).toBe('/deposit');
+    expect(screen.getByRole('link', { name: 'Back to wallet' })).toHaveAttribute('href', '/wallet');
+    expect(fixture.adapter.mock.calls.map(([config]) => config.url)).toEqual([
+      '/api/v1/auth/csrf',
+      '/api/v1/auth/refresh',
+      '/api/v1/wallet/me',
+    ]);
+  });
+
   it('opens the transfer shell from the wallet without sending a money request', async () => {
     const fixture = renderWallet([successReply(wallet), successReply(wallet)]);
     await screen.findByLabelText('Available balance: 12,000 VND');
@@ -129,7 +148,8 @@ describe('wallet page with session-bound API', () => {
     await screen.findByLabelText('Available balance: 0 VND');
     expect(screen.queryByText(/Oct 21, 2026/)).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Transfer' })).toHaveAttribute('href', '/transfer');
-    for (const name of ['Top up', 'Transaction history']) {
+    expect(screen.getByRole('link', { name: 'Top up' })).toHaveAttribute('href', '/deposit');
+    for (const name of ['Transaction history']) {
       expect(screen.queryByRole('button', { name })).not.toBeInTheDocument();
       expect(screen.queryByRole('link', { name })).not.toBeInTheDocument();
     }

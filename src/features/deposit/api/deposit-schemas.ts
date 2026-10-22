@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { idempotencyKeySchema } from '@/shared/api/idempotency-key';
+import { paymentOrderIdSchema } from '@/shared/api/payment-order-id';
 import { vietnamDateTimeSchema } from '@/shared/api/scalar-schemas';
 
 export const MIN_DEPOSIT_AMOUNT = 10_000;
@@ -26,7 +27,7 @@ export const depositAmountInputSchema = z
   .transform((value) => Number(value));
 
 export const depositRequestSchema = z.object({ amount: depositAmountSchema }).strict();
-export const depositOrderIdSchema = z.string().regex(/^[A-Za-z0-9_-]{1,100}$/);
+export const depositOrderIdSchema = paymentOrderIdSchema;
 
 function localTimeOrder(value: string) {
   return `${value.slice(0, 19)}.${value.slice(20).padEnd(9, '0')}`;

@@ -318,6 +318,11 @@ body {
   min-width: 0;
   gap: 24px;
 }
+.wallet-actions {
+  display: flex;
+  justify-content: flex-start;
+  gap: 12px;
+}
 .wallet-transfer-link {
   display: inline-flex;
   align-items: center;
