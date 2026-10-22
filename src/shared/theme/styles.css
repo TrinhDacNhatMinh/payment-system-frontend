@@ -323,6 +323,9 @@ body {
   justify-content: flex-start;
   gap: 12px;
 }
+.deposit-method {
+  margin-bottom: 24px;
+}
 .wallet-transfer-link {
   display: inline-flex;
   align-items: center;

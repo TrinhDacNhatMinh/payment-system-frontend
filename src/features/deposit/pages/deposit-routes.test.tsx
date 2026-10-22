@@ -128,11 +128,11 @@ describe('deposit and payment result route boundaries', () => {
       }
     });
     expect(privateLoader).not.toHaveBeenCalled();
-    expect(screen.queryByText('Top up is not available yet.')).not.toBeInTheDocument();
+    expect(screen.queryByRole('form', { name: 'Top-up details' })).not.toBeInTheDocument();
     expect(fixture.adapter).not.toHaveBeenCalled();
   });
 
-  it('signs in at the deposit URL and displays only the shell without payment API requests', async () => {
+  it('signs in at the deposit URL and displays the form without payment API requests', async () => {
     const fixture = createSessionFixture([csrfReply(), successReply(testSession)], {
       initial: { version: 1, epoch: '10000000-0000-4000-8000-000000000001', mode: 'signed-out' },
     });
@@ -145,23 +145,38 @@ describe('deposit and payment result route boundaries', () => {
     await userEvent.setup().click(screen.getByRole('button', { name: 'Sign in' }));
     await screen.findByRole('heading', { name: 'Top up' });
     expect(router.state.location.pathname).toBe('/deposit');
-    expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+    expect(screen.getByRole('form', { name: 'Top-up details' })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/^Amount/), { target: { value: '10000' } });
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Continue' }));
+    await screen.findByRole('heading', { name: 'Review top-up' });
+    expect(screen.getByRole('button', { name: 'Pay with VNPay' })).toBeDisabled();
     expect(fixture.adapter.mock.calls.map(([config]) => config.url)).toEqual([
       '/api/v1/auth/csrf',
       '/api/v1/auth/login',
     ]);
-  });
-
-  it('removes the deposit shell on cross-tab logout without changing its URL', async () => {
-    const fixture = createSessionFixture([csrfReply(), successReply(testSession)]);
-    const { router } = renderApp('/deposit', fixture);
-    await screen.findByRole('heading', { name: 'Top up' });
     const otherTab = fixture.hub.connect();
     await act(async () => {
       await otherTab.change(() => ({ version: 1, epoch: otherTab.newEpoch(), mode: 'signed-out' }));
     });
     await screen.findByRole('heading', { name: 'Sign in' });
-    expect(screen.queryByText('Top up is not available yet.')).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Review top-up' })).not.toBeInTheDocument();
+    expect(screen.queryByText('10,000 VND')).not.toBeInTheDocument();
+    expect(router.state.location.pathname).toBe('/deposit');
+    expect(fixture.adapter).toHaveBeenCalledTimes(2);
+  });
+
+  it('removes the deposit draft on cross-tab logout without changing its URL', async () => {
+    const fixture = createSessionFixture([csrfReply(), successReply(testSession)]);
+    const { router } = renderApp('/deposit', fixture);
+    await screen.findByRole('heading', { name: 'Top up' });
+    fireEvent.change(screen.getByLabelText(/^Amount/), { target: { value: '12345' } });
+    const otherTab = fixture.hub.connect();
+    await act(async () => {
+      await otherTab.change(() => ({ version: 1, epoch: otherTab.newEpoch(), mode: 'signed-out' }));
+    });
+    await screen.findByRole('heading', { name: 'Sign in' });
+    expect(screen.queryByRole('form', { name: 'Top-up details' })).not.toBeInTheDocument();
+    expect(screen.queryByDisplayValue('12345')).not.toBeInTheDocument();
     expect(router.state.location.pathname).toBe('/deposit');
     expect(fixture.adapter).toHaveBeenCalledTimes(2);
   });
