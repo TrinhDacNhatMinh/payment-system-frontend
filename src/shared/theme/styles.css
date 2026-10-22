@@ -329,6 +329,14 @@ body {
 .deposit-feedback {
   margin-bottom: 24px;
 }
+.deposit-failed-icon {
+  color: var(--app-error);
+  font-size: 48px;
+}
+.deposit-pending-icon {
+  color: var(--app-primary);
+  font-size: 48px;
+}
 .wallet-transfer-link {
   display: inline-flex;
   align-items: center;
@@ -565,6 +573,23 @@ body {
 .transfer-receipt .transfer-back-action:hover {
   background: var(--app-primaryHover);
   border-color: var(--app-primaryHover);
+}
+.transfer-receipt .deposit-result-actions {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.transfer-receipt .deposit-result-actions .wallet-transfer-link {
+  justify-self: stretch;
+  box-sizing: border-box;
+}
+.transfer-receipt .deposit-result-actions .transfer-back-action {
+  background: var(--app-surface);
+  border-color: var(--app-border);
+  color: var(--app-text);
+}
+.transfer-receipt .deposit-result-actions .transfer-back-action:hover {
+  background: var(--app-surface);
+  border-color: var(--app-primaryHover);
+  color: var(--app-primaryHover);
 }
 
 @media (max-width: 1000px) {

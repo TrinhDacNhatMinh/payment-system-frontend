@@ -21,10 +21,15 @@ import { useSessionRouteInvalidation } from '@/app/use-session-route-invalidatio
 import type { SessionController } from '@/features/auth/model/session-controller';
 import { SessionProvider } from '@/features/auth/model/session-provider';
 import { RegisterPage } from '@/features/auth/pages/register-page';
+import { walletQueryOptions } from '@/features/wallet/api/wallet-query';
 import { parsePaymentResultSearch } from '@/shared/lib/payment-result-context';
 import { errorReply, successReply } from '@/test/api-adapter';
 import { createSessionFixture, csrfReply, testSession } from '@/test/auth-session';
-import { depositKey, makeDepositOrder } from '../api/deposit-fixture.test-support';
+import {
+  depositKey,
+  makeDepositOrder,
+  makeVnpayReturnFragment,
+} from '../api/deposit-fixture.test-support';
 import { DEPOSIT_MARKER_KEY } from '../model/deposit-marker';
 import { DepositPage } from './deposit-page';
 import { PaymentResultPage } from './payment-result-page';
@@ -118,7 +123,7 @@ function renderApp(path: string, fixture: ReturnType<typeof createSessionFixture
       </ConfigProvider>
     </QueryClientProvider>,
   );
-  return { router, privateLoader };
+  return { router, privateLoader, queryClient };
 }
 
 function anonymous() {
@@ -128,6 +133,113 @@ function anonymous() {
 }
 
 describe('deposit and payment result route boundaries', () => {
+  it('opens a fresh top-up form from a pending result without waiting for payment completion', async () => {
+    vi.stubEnv('VITE_API_BASE_URL', 'http://localhost:8080');
+    vi.stubEnv('VITE_VNPAY_TMN_CODE', 'TESTCODE');
+    vi.stubEnv('VITE_VNPAY_RETURN_URL', '');
+    window.sessionStorage.setItem(
+      DEPOSIT_MARKER_KEY,
+      JSON.stringify({ userId: 1, idempotencyKey: depositKey }),
+    );
+    const order = { ...makeDepositOrder(), canContinuePayment: false, paymentUrl: null };
+    const fixture = createSessionFixture([
+      csrfReply(),
+      successReply(testSession),
+      successReply(order),
+    ]);
+    const { router } = renderApp(`/payment/result?orderId=${order.orderId}`, fixture);
+    await screen.findByRole('heading', { name: 'Payment pending' });
+    expect(screen.getByRole('link', { name: 'Back to wallet' })).toHaveAttribute('href', '/wallet');
+    expect(window.sessionStorage.getItem(DEPOSIT_MARKER_KEY)).toBeNull();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('link', { name: 'Continue' }));
+    await screen.findByRole('form', { name: 'Top-up details' });
+    expect(router.state.location.pathname).toBe('/deposit');
+    fireEvent.change(screen.getByLabelText(/^Amount/), { target: { value: '10000' } });
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+    await screen.findByRole('heading', { name: 'Review top-up' });
+    expect(screen.getByRole('button', { name: 'Pay with VNPay' })).toBeEnabled();
+    expect(fixture.adapter).toHaveBeenCalledTimes(3);
+  });
+
+  it('forwards the signed return before owner lookup and removes the callback fragment', async () => {
+    vi.stubEnv('VITE_API_BASE_URL', 'http://localhost:8080');
+    const callback = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ RspCode: '00', Message: 'Confirm Success' })),
+      );
+    vi.stubGlobal('fetch', callback);
+    const order = makeDepositOrder();
+    const fixture = createSessionFixture([
+      csrfReply(),
+      successReply(testSession),
+      successReply({ ...order, status: 'SUCCESS', canContinuePayment: false, paymentUrl: null }),
+      successReply({
+        id: 7,
+        userId: 1,
+        balance: 50000,
+        currency: 'VND',
+        updatedAt: '2026-10-22T10:05:00',
+      }),
+    ]);
+    const { router } = renderApp(
+      `/payment/result?orderId=${order.orderId}#${makeVnpayReturnFragment()}`,
+      fixture,
+    );
+    await screen.findByRole('heading', { name: 'Top-up successful' });
+    expect(callback).toHaveBeenCalledOnce();
+    expect(router.state.location.hash).toBe('');
+    expect(router.state.location.search).toEqual({ orderId: order.orderId });
+    expect(String(callback.mock.calls[0]?.[0])).toContain('/api/v1/payment/vnpay-webhook?');
+    expect(callback.mock.calls[0]?.[1]).toMatchObject({ method: 'GET', credentials: 'omit' });
+    // Session restoration POSTs to refresh; returning from payment must not create another order.
+    expect(
+      fixture.adapter.mock.calls
+        .filter(([config]) => config.method === 'post')
+        .map(([config]) => config.url),
+    ).toEqual(['/api/v1/auth/refresh']);
+  });
+
+  it('ignores a forged status query and fetches the server balance after confirmed success', async () => {
+    const order = {
+      ...makeDepositOrder(),
+      orderId: 'VNPAY_1',
+      canContinuePayment: false,
+      paymentUrl: null,
+    };
+    const wallet = {
+      id: 7,
+      userId: 1,
+      balance: 999999,
+      currency: 'VND',
+      updatedAt: '2026-10-22T10:05:00',
+    };
+    const fixture = createSessionFixture([
+      csrfReply(),
+      successReply(testSession),
+      successReply({ ...order, status: 'SUCCESS', paidAt: '2026-10-22T10:05:00' }),
+      successReply(wallet),
+    ]);
+    const { queryClient } = renderApp('/payment/result?orderId=VNPAY_1&status=FAILED', fixture);
+    await screen.findByRole('heading', { name: 'Top-up successful' });
+    const access = fixture.controller.getAccessIdentity();
+    if (!access) throw new Error('Expected authenticated result fixture');
+    const key = walletQueryOptions({
+      session: fixture.controller,
+      access,
+      api: fixture.privateApi(access),
+    }).queryKey;
+    await waitFor(() => expect(queryClient.getQueryData(key)).toEqual(wallet));
+    expect(window.sessionStorage.getItem(DEPOSIT_MARKER_KEY)).toBeNull();
+    expect(fixture.adapter.mock.calls.map(([config]) => config.url)).toEqual([
+      '/api/v1/auth/csrf',
+      '/api/v1/auth/refresh',
+      '/api/v1/payment/orders/VNPAY_1',
+      '/api/v1/wallet/me',
+    ]);
+  });
+
   it('sends one confirmed request and recovers by GET without opening the gateway on lookup', async () => {
     vi.stubEnv('VITE_API_BASE_URL', 'http://localhost:8080');
     vi.stubEnv('VITE_VNPAY_TMN_CODE', 'TESTCODE');
@@ -137,6 +249,7 @@ describe('deposit and payment result route boundaries', () => {
       csrfReply(),
       successReply(testSession),
       errorReply('INTERNAL_SERVER_ERROR', 500),
+      successReply(makeDepositOrder()),
       successReply(makeDepositOrder()),
     ]);
     const { router } = renderApp('/deposit', fixture);
@@ -156,7 +269,7 @@ describe('deposit and payment result route boundaries', () => {
       idempotencyKey: depositKey,
     });
     await user.click(check);
-    await screen.findByText('Payment verification is not available yet');
+    await screen.findByRole('heading', { name: 'Payment pending' });
     expect(router.state.location.pathname).toBe('/payment/result');
     expect(router.state.location.search).toEqual({ orderId: makeDepositOrder().orderId });
     expect(fixture.adapter.mock.calls.map(([config]) => config.url)).toEqual([
@@ -164,6 +277,7 @@ describe('deposit and payment result route boundaries', () => {
       '/api/v1/auth/refresh',
       '/api/v1/payment/deposit',
       `/api/v1/payment/deposit/requests/${depositKey}`,
+      `/api/v1/payment/orders/${makeDepositOrder().orderId}`,
     ]);
     const config = fixture.adapter.mock.calls[2]?.[0];
     expect(config?.data).toBe('{"amount":50000}');
@@ -277,24 +391,31 @@ describe('deposit and payment result route boundaries', () => {
   });
 
   it('restores a direct result URL and removes private content on cross-tab logout while retaining the order context', async () => {
-    const fixture = createSessionFixture([csrfReply(), successReply(testSession)]);
+    const fixture = createSessionFixture([
+      csrfReply(),
+      successReply(testSession),
+      successReply({
+        ...makeDepositOrder(),
+        orderId: 'VNPAY_1',
+        canContinuePayment: false,
+        paymentUrl: null,
+      }),
+    ]);
     const { router } = renderApp('/payment/result?orderId=VNPAY_1', fixture);
-    await screen.findByText('Payment verification is not available yet');
+    await screen.findByRole('heading', { name: 'Payment pending' });
     expect(router.state.location.search).toEqual({ orderId: 'VNPAY_1' });
-    expect(fixture.adapter).toHaveBeenCalledTimes(2);
+    expect(fixture.adapter).toHaveBeenCalledTimes(3);
     const otherTab = fixture.hub.connect();
     await act(async () => {
       await otherTab.change(() => ({ version: 1, epoch: otherTab.newEpoch(), mode: 'signed-out' }));
     });
     await screen.findByRole('heading', { name: 'Sign in' });
     await waitFor(() =>
-      expect(
-        screen.queryByText('Payment verification is not available yet'),
-      ).not.toBeInTheDocument(),
+      expect(screen.queryByRole('heading', { name: 'Payment pending' })).not.toBeInTheDocument(),
     );
     expect(router.state.location.pathname).toBe('/payment/result');
     expect(router.state.location.search).toEqual({ orderId: 'VNPAY_1' });
     expect(screen.queryByText(testSession.user.email)).not.toBeInTheDocument();
-    expect(fixture.adapter).toHaveBeenCalledTimes(2);
+    expect(fixture.adapter).toHaveBeenCalledTimes(3);
   });
 });

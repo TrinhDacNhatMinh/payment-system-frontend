@@ -22,6 +22,22 @@ function parseKey(value: string) {
 }
 
 // The flow owns key generation, persistence and explicit resume/redirect actions.
+export function createDepositOrderReader(privateApi: PrivateApiFactory, access: SessionAccess) {
+  const api = privateApi(access);
+  return {
+    async getOrder(orderId: string, signal?: AbortSignal) {
+      const id = depositOrderIdSchema.safeParse(orderId);
+      if (!id.success) throw new ApiError('client');
+      const order = await api.request(
+        { method: 'GET', path: `/api/v1/payment/orders/${encodeURIComponent(id.data)}`, signal },
+        depositOrderSchema,
+      );
+      if (order.orderId !== id.data) throw new ApiError('protocol');
+      return order;
+    },
+  };
+}
+
 export function createDepositApi(
   privateApi: PrivateApiFactory,
   access: SessionAccess,
@@ -29,6 +45,7 @@ export function createDepositApi(
 ) {
   const api = privateApi(access);
   const policy = createPaymentUrlPolicy(config);
+  const reader = createDepositOrderReader(privateApi, access);
   function validate(order: DepositOrder) {
     validatePaymentUrl(order, policy);
     return order;
@@ -53,14 +70,7 @@ export function createDepositApi(
       return validate(result);
     },
     async getOrder(orderId: string, signal?: AbortSignal) {
-      const id = depositOrderIdSchema.safeParse(orderId);
-      if (!id.success) throw new ApiError('client');
-      const result = await api.request(
-        { method: 'GET', path: `/api/v1/payment/orders/${encodeURIComponent(id.data)}`, signal },
-        depositOrderSchema,
-      );
-      if (result.orderId !== id.data) throw new ApiError('protocol');
-      return validate(result);
+      return validate(await reader.getOrder(orderId, signal));
     },
     async getRequest(idempotencyKey: string, signal?: AbortSignal) {
       const key = parseKey(idempotencyKey);

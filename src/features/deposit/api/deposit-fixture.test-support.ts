@@ -5,6 +5,21 @@ export const depositGatewayConfig = {
   merchantCode: 'TESTCODE',
 };
 
+export function makeVnpayReturnFragment() {
+  const query = new URLSearchParams({
+    vnp_TxnRef: makeDepositOrder().orderId,
+    vnp_Amount: '5000000',
+    vnp_OrderInfo: 'Top up + coffee & lunch',
+    vnp_ResponseCode: '00',
+    vnp_TransactionStatus: '00',
+    vnp_TransactionNo: '12345',
+    vnp_PayDate: '20261022100500',
+    vnp_TmnCode: 'TESTCODE',
+    vnp_SecureHash: 'a'.repeat(128),
+  }).toString();
+  return `vnpayReturn=${encodeURIComponent(query)}`;
+}
+
 export function makeDepositOrder() {
   const orderId = 'VNPAY_0123456789ABCDEF';
   const amount = 50000;
