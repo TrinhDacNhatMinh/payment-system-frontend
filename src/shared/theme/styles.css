@@ -598,6 +598,31 @@ body {
   max-width: 100%;
 }
 
+.transaction-filters {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.transaction-filter-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+@media (max-width: 1000px) {
+  .transaction-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .transaction-filters {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .transaction-table:focus-visible {
   outline: 3px solid var(--app-focus);
   outline-offset: 3px;

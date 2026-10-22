@@ -75,8 +75,12 @@ describe('responsive transaction records', () => {
       expect.stringContaining('Transfer received'),
     ]);
     expect(screen.getByLabelText('Sent: 50,000 VND')).toHaveTextContent('−50,000 VND');
-    expect(screen.getByLabelText('Pending incoming amount: 50,000 VND')).toHaveTextContent('+50,000 VND');
-    expect(screen.getByLabelText('Pending incoming amount: 50,000 VND')).toHaveClass('transaction-amount-neutral');
+    expect(screen.getByLabelText('Pending incoming amount: 50,000 VND')).toHaveTextContent(
+      '+50,000 VND',
+    );
+    expect(screen.getByLabelText('Pending incoming amount: 50,000 VND')).toHaveClass(
+      'transaction-amount-neutral',
+    );
     expect(screen.getByLabelText('Amount: 50,000 VND')).toHaveTextContent('50,000 VND');
     expect(screen.getByLabelText('No description')).toHaveTextContent('—');
     expect(screen.getAllByText('14:35 22/10/2026')).toHaveLength(3);

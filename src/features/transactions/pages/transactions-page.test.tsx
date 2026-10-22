@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
@@ -49,6 +49,7 @@ function TestRouter({ router }: { router: AnyRouter }) {
 function renderTransactions(
   replies: ApiReply[],
   options: Parameters<typeof createSessionFixture>[1] = {},
+  initialEntry = '/transactions',
 ) {
   const client = new QueryClient();
   const fixture = createSessionFixture(replies, {
@@ -63,7 +64,7 @@ function renderTransactions(
   const router = createRouter({
     routeTree,
     context: { queryClient: client, session: fixture.controller, privateApi: fixture.privateApi },
-    history: createMemoryHistory({ initialEntries: ['/transactions'] }),
+    history: createMemoryHistory({ initialEntries: [initialEntry] }),
     defaultPreload: false,
   });
   render(
@@ -79,6 +80,84 @@ function renderTransactions(
 }
 
 describe('transactions private page', () => {
+  it('restores URL filters and blocks invalid search until reset without a history request', async () => {
+    const fixture = renderTransactions(
+      [csrfReply(), successReply(testSession), successReply(transactionPage)],
+      {},
+      '/transactions?type=INVALID&page=0',
+    );
+    await screen.findByText('Invalid filters');
+    expect(fixture.adapter).toHaveBeenCalledTimes(2);
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Reset filters' }));
+    await screen.findByText('1 transaction');
+    expect(fixture.router.state.location.search).toEqual({});
+    expect(fixture.adapter.mock.calls[2]?.[0].params).toEqual({ page: 0, size: 10 });
+  });
+
+  it('applies a draft at page one and restores filters with Back and Forward', async () => {
+    const initial = {
+      ...transactionPage,
+      page: 2,
+      size: 20,
+      content: [],
+      totalElements: 0,
+      totalPages: 0,
+    };
+    const applied = { ...transactionPage, size: 20 };
+    const fixture = renderTransactions(
+      [
+        csrfReply(),
+        successReply(testSession),
+        successReply(initial),
+        successReply(applied),
+        successReply(initial),
+        successReply(applied),
+        successReply(applied),
+      ],
+      {},
+      '/transactions?type=TRANSFER_OUT&status=SUCCESS&fromDate=2026-10-20&toDate=2026-10-22&page=3&size=20',
+    );
+    await screen.findByRole('heading', { name: 'No matching transactions' });
+    expect(fixture.adapter.mock.calls[2]?.[0].params).toEqual({
+      type: 'TRANSFER_OUT',
+      status: 'SUCCESS',
+      fromDate: '2026-10-20T00:00:00',
+      toDate: '2026-10-22T23:59:59.999999',
+      page: 2,
+      size: 20,
+    });
+    fireEvent.change(screen.getByLabelText('From date'), { target: { value: '2026-10-21' } });
+    expect(fixture.adapter).toHaveBeenCalledTimes(3);
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Apply' }));
+    await screen.findByText('1 transaction');
+    expect(fixture.router.state.location.search).toEqual({
+      type: 'TRANSFER_OUT',
+      status: 'SUCCESS',
+      fromDate: '2026-10-21',
+      toDate: '2026-10-22',
+      size: 20,
+    });
+    expect(fixture.adapter.mock.calls[3]?.[0].params).toMatchObject({
+      fromDate: '2026-10-21T00:00:00',
+      page: 0,
+      size: 20,
+    });
+    await act(async () => {
+      fixture.router.history.back();
+    });
+    await screen.findByRole('heading', { name: 'No matching transactions' });
+    expect(screen.getByLabelText('From date')).toHaveValue('2026-10-20');
+    await act(async () => {
+      fixture.router.history.forward();
+    });
+    await screen.findByText('1 transaction');
+    expect(screen.getByLabelText('From date')).toHaveValue('2026-10-21');
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Reset' }));
+    await waitFor(() => expect(fixture.router.state.location.search).toEqual({ size: 20 }));
+    await waitFor(() => expect(fixture.adapter).toHaveBeenCalledTimes(7));
+    expect(fixture.adapter.mock.calls[6]?.[0].params).toEqual({ page: 0, size: 20 });
+  });
+
   it('keeps /transactions signed out and never preloads private history', async () => {
     const fixture = renderTransactions([], {
       initial: { version: 1, epoch: '10000000-0000-4000-8000-000000000001', mode: 'signed-out' },

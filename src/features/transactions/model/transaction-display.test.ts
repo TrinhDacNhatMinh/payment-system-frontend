@@ -22,7 +22,12 @@ describe('transaction presentation', () => {
     const item = transactionDisplay(
       transactionResponseSchema.parse({ ...transaction, type, status: 'PENDING' }),
     );
-    expect(item).toMatchObject({ amount, amountLabel, direction: 'neutral', statusLabel: 'Pending' });
+    expect(item).toMatchObject({
+      amount,
+      amountLabel,
+      direction: 'neutral',
+      statusLabel: 'Pending',
+    });
   });
 
   it('keeps failed amounts unsigned and neutral', () => {

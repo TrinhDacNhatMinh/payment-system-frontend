@@ -15,7 +15,7 @@ function comparableDateTime(value: string) {
   return `${seconds}.${fraction.padEnd(9, '0')}`;
 }
 
-// API page numbers are zero-based. URL/day-picker conversion belongs to I4-05.
+// API page numbers are zero-based. URL/day-picker conversion lives in transaction-search.
 export const transactionFiltersSchema = z
   .object({
     type: transactionTypeSchema.optional(),

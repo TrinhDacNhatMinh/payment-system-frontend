@@ -1,4 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
+import { getRouteApi } from '@tanstack/react-router';
+import { Button } from 'antd';
 
 import { useAuthSession } from '@/features/auth/model/session-context';
 import type { SessionAccess } from '@/features/auth/model/session-access';
@@ -9,12 +11,37 @@ import { ContentState } from '@/shared/ui/content-state';
 import { PageHeading } from '@/shared/ui/page-heading';
 import { transactionQueryOptions } from '../api/transaction-query';
 import { TransactionHistory } from '../ui/transaction-history';
+import { TransactionFilters } from '../ui/transaction-filters';
+import {
+  appliedTransactionFilters,
+  transactionFilterDraft,
+  transactionSearchFromDraft,
+  type TransactionFilterDraft,
+  type TransactionSearch,
+} from '../model/transaction-search';
+
+const route = getRouteApi('/_authenticated/transactions');
 
 export function TransactionsPage() {
   const session = useAuthSession();
+  const search = route.useSearch();
+  const navigate = route.useNavigate();
   const access = session?.controller.getAccessIdentity();
   if (!session?.privateApi || !access) {
     return <ContentState kind="loading" title="Checking your session…" />;
+  }
+  if (search.invalid) {
+    return (
+      <div className="flex flex-col gap-6">
+        <PageHeading title="Transactions" />
+        <ContentState
+          kind="warning"
+          title="Invalid filters"
+          description="Check the filters in the address or reset them to view your transactions."
+        />
+        <Button onClick={() => void navigate({ search: {}, replace: true })}>Reset filters</Button>
+      </div>
+    );
   }
   return (
     <TransactionsContent
@@ -22,6 +49,8 @@ export function TransactionsPage() {
       session={session.controller}
       access={access}
       api={session.privateApi(access)}
+      search={search}
+      apply={(draft) => navigate({ search: transactionSearchFromDraft(draft, search.size ?? 10) })}
     />
   );
 }
@@ -30,12 +59,24 @@ function TransactionsContent({
   session,
   access,
   api,
+  search,
+  apply,
 }: {
   session: SessionController;
   access: SessionAccess;
   api: ApiTransport;
+  search: TransactionSearch;
+  apply: (value: TransactionFilterDraft) => Promise<void>;
 }) {
-  const query = useQuery(transactionQueryOptions({ session, access, api }));
+  const query = useQuery(
+    transactionQueryOptions({
+      session,
+      access,
+      api,
+      filters: appliedTransactionFilters(search),
+    }),
+  );
+  const hasFilters = Boolean(search.type || search.status || search.fromDate || search.toDate);
   const error = query.error ? normalizeApiError(query.error) : null;
   const unavailable = error?.code === 'WALLET_NOT_FOUND';
   const accessRejected = error?.status === 401 || error?.status === 403;
@@ -46,6 +87,11 @@ function TransactionsContent({
   return (
     <div className="flex flex-col gap-6">
       <PageHeading title="Transactions" />
+      <TransactionFilters
+        key={JSON.stringify(search)}
+        initialValues={transactionFilterDraft(search)}
+        apply={apply}
+      />
       {query.isError ? (
         <ContentState
           kind={unavailable ? 'warning' : 'error'}
@@ -77,12 +123,16 @@ function TransactionsContent({
               kind="empty"
               title={
                 query.data.totalElements === 0
-                  ? 'No transactions yet'
+                  ? hasFilters
+                    ? 'No matching transactions'
+                    : 'No transactions yet'
                   : 'No transactions on this page'
               }
               description={
                 query.data.totalElements === 0
-                  ? 'Your transfers and top-ups will appear here.'
+                  ? hasFilters
+                    ? 'Try different filters or reset them.'
+                    : 'Your transfers and top-ups will appear here.'
                   : 'There are no transactions to display on this page.'
               }
             />
