@@ -122,6 +122,9 @@ describe('transactions private page', () => {
       release();
     }
     await screen.findByText('1 transaction');
+    expect(screen.getByRole('table')).toBeInTheDocument();
+    expect(screen.getByText('Transfer sent')).toBeInTheDocument();
+    expect(screen.getByLabelText('Sent: 50,000 VND')).toBeVisible();
     expect(
       adapter.mock.calls.filter(([config]) => config.url === MY_TRANSACTIONS_PATH),
     ).toHaveLength(1);

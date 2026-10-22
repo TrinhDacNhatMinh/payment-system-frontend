@@ -1,5 +1,4 @@
 import { useQuery } from '@tanstack/react-query';
-import { Card } from 'antd';
 
 import { useAuthSession } from '@/features/auth/model/session-context';
 import type { SessionAccess } from '@/features/auth/model/session-access';
@@ -9,6 +8,7 @@ import type { ApiTransport } from '@/shared/api/http-client';
 import { ContentState } from '@/shared/ui/content-state';
 import { PageHeading } from '@/shared/ui/page-heading';
 import { transactionQueryOptions } from '../api/transaction-query';
+import { TransactionHistory } from '../ui/transaction-history';
 
 export function TransactionsPage() {
   const session = useAuthSession();
@@ -87,13 +87,13 @@ function TransactionsContent({
               }
             />
           ) : (
-            <Card>
-              {/* I4-04 adds the responsive records; I4-03 establishes the private page states. */}
+            <div>
               <p>
                 {query.data.totalElements.toLocaleString('en-US')}{' '}
                 {query.data.totalElements === 1 ? 'transaction' : 'transactions'}
               </p>
-            </Card>
+              <TransactionHistory transactions={query.data.content} />
+            </div>
           )}
         </section>
       )}

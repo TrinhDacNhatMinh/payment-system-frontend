@@ -11,6 +11,7 @@ export const designTokens = {
   borderControl: '#D0D5DD',
   focus: '#91CAFF',
   success: '#237804',
+  moneyOutgoing: '#C44949',
   warning: '#874D00',
   error: '#B42318',
   infoBackground: '#E6F4FF',

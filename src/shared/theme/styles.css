@@ -593,6 +593,71 @@ body {
   color: var(--app-primaryHover);
 }
 
+.transaction-table {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.transaction-table:focus-visible {
+  outline: 3px solid var(--app-focus);
+  outline-offset: 3px;
+}
+
+.transaction-list {
+  display: grid;
+  gap: 12px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+.transaction-list > li {
+  min-width: 0;
+}
+
+.transaction-card-heading {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.transaction-card-heading h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.transaction-card-amount {
+  margin: 16px 0;
+  text-align: right;
+  font-size: 20px;
+}
+
+.transaction-amount {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.transaction-amount-incoming {
+  color: var(--app-success);
+}
+
+.transaction-amount-outgoing {
+  color: var(--app-moneyOutgoing);
+}
+
+.transaction-description {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.transaction-time {
+  color: var(--app-textSecondary);
+}
+
 @media (max-width: 1000px) {
   .app-shell {
     --sidebar-width: 200px;
