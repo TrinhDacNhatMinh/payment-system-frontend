@@ -14,6 +14,7 @@ import { Route as AuthenticatedRouteImport } from './routes/_authenticated';
 import { Route as LoginRouteImport } from './routes/login';
 import { Route as RegisterRouteImport } from './routes/register';
 import { Route as AuthenticatedDepositRouteImport } from './routes/_authenticated.deposit';
+import { Route as AuthenticatedTransactionsRouteImport } from './routes/_authenticated.transactions';
 import { Route as AuthenticatedTransferRouteImport } from './routes/_authenticated.transfer';
 import { Route as AuthenticatedWalletRouteImport } from './routes/_authenticated.wallet';
 import { Route as PaymentResultRouteImport } from './routes/payment.result';
@@ -42,6 +43,12 @@ const AuthenticatedDepositRoute = AuthenticatedDepositRouteImport.update({
   path: '/deposit',
   getParentRoute: () => AuthenticatedRoute,
 } as any);
+const AuthenticatedTransactionsRoute =
+  AuthenticatedTransactionsRouteImport.update({
+    id: '/transactions',
+    path: '/transactions',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any);
 const AuthenticatedTransferRoute = AuthenticatedTransferRouteImport.update({
   id: '/transfer',
   path: '/transfer',
@@ -63,6 +70,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute;
   '/register': typeof RegisterRoute;
   '/deposit': typeof AuthenticatedDepositRoute;
+  '/transactions': typeof AuthenticatedTransactionsRoute;
   '/transfer': typeof AuthenticatedTransferRoute;
   '/wallet': typeof AuthenticatedWalletRoute;
   '/payment/result': typeof PaymentResultRoute;
@@ -72,6 +80,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute;
   '/register': typeof RegisterRoute;
   '/deposit': typeof AuthenticatedDepositRoute;
+  '/transactions': typeof AuthenticatedTransactionsRoute;
   '/transfer': typeof AuthenticatedTransferRoute;
   '/wallet': typeof AuthenticatedWalletRoute;
   '/payment/result': typeof PaymentResultRoute;
@@ -83,6 +92,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute;
   '/register': typeof RegisterRoute;
   '/_authenticated/deposit': typeof AuthenticatedDepositRoute;
+  '/_authenticated/transactions': typeof AuthenticatedTransactionsRoute;
   '/_authenticated/transfer': typeof AuthenticatedTransferRoute;
   '/_authenticated/wallet': typeof AuthenticatedWalletRoute;
   '/payment/result': typeof PaymentResultRoute;
@@ -94,6 +104,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/register'
     | '/deposit'
+    | '/transactions'
     | '/transfer'
     | '/wallet'
     | '/payment/result';
@@ -103,6 +114,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/register'
     | '/deposit'
+    | '/transactions'
     | '/transfer'
     | '/wallet'
     | '/payment/result';
@@ -113,6 +125,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/register'
     | '/_authenticated/deposit'
+    | '/_authenticated/transactions'
     | '/_authenticated/transfer'
     | '/_authenticated/wallet'
     | '/payment/result';
@@ -163,6 +176,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDepositRouteImport;
       parentRoute: typeof AuthenticatedRoute;
     };
+    '/_authenticated/transactions': {
+      id: '/_authenticated/transactions';
+      path: '/transactions';
+      fullPath: '/transactions';
+      preLoaderRoute: typeof AuthenticatedTransactionsRouteImport;
+      parentRoute: typeof AuthenticatedRoute;
+    };
     '/_authenticated/transfer': {
       id: '/_authenticated/transfer';
       path: '/transfer';
@@ -189,12 +209,14 @@ declare module '@tanstack/react-router' {
 
 interface AuthenticatedRouteChildren {
   AuthenticatedDepositRoute: typeof AuthenticatedDepositRoute;
+  AuthenticatedTransactionsRoute: typeof AuthenticatedTransactionsRoute;
   AuthenticatedTransferRoute: typeof AuthenticatedTransferRoute;
   AuthenticatedWalletRoute: typeof AuthenticatedWalletRoute;
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedDepositRoute: AuthenticatedDepositRoute,
+  AuthenticatedTransactionsRoute: AuthenticatedTransactionsRoute,
   AuthenticatedTransferRoute: AuthenticatedTransferRoute,
   AuthenticatedWalletRoute: AuthenticatedWalletRoute,
 };

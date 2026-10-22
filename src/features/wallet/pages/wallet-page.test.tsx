@@ -71,6 +71,7 @@ function renderWallet(replies: ApiReply[], adapter?: AxiosAdapter) {
       walletRoute,
       transferRoute,
       createRoute({ getParentRoute: () => root, path: '/deposit', component: DepositPage }),
+      createRoute({ getParentRoute: () => root, path: '/transactions' }),
     ]),
     history: createMemoryHistory({ initialEntries: ['/wallet'] }),
     defaultPreload: false,
@@ -153,10 +154,10 @@ describe('wallet page with session-bound API', () => {
     expect(screen.queryByText(/Oct 21, 2026/)).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Transfer' })).toHaveAttribute('href', '/transfer');
     expect(screen.getByRole('link', { name: 'Top up' })).toHaveAttribute('href', '/deposit');
-    for (const name of ['Transaction history']) {
-      expect(screen.queryByRole('button', { name })).not.toBeInTheDocument();
-      expect(screen.queryByRole('link', { name })).not.toBeInTheDocument();
-    }
+    expect(screen.getByRole('link', { name: 'Transaction history' })).toHaveAttribute(
+      'href',
+      '/transactions',
+    );
     for (const text of [
       'Wallet actions',
       'These actions are not available yet.',

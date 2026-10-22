@@ -68,8 +68,9 @@ async function renderLayout(component: () => ReactNode) {
   const wallet = createRoute({ getParentRoute: () => root, path: '/wallet' });
   const transfer = createRoute({ getParentRoute: () => root, path: '/transfer' });
   const deposit = createRoute({ getParentRoute: () => root, path: '/deposit' });
+  const transactions = createRoute({ getParentRoute: () => root, path: '/transactions' });
   const router = createRouter({
-    routeTree: root.addChildren([wallet, transfer, deposit]),
+    routeTree: root.addChildren([wallet, transfer, deposit, transactions]),
     history: createMemoryHistory({ initialEntries: ['/wallet'] }),
   });
   await act(() => router.load());
@@ -78,6 +79,35 @@ async function renderLayout(component: () => ReactNode) {
 }
 
 describe('application navigation', () => {
+  it.each([390, 1200])('opens Transactions and marks it active at width %s', async (width) => {
+    viewportWidth = width;
+    const router = await renderLayout(() => (
+      <AppLayout>
+        <h1>Page content</h1>
+      </AppLayout>
+    ));
+    const user = userEvent.setup();
+    if (width <= 700) await user.click(screen.getByRole('button', { name: 'Open menu' }));
+    const link = await screen.findByRole('link', { name: 'Transactions' });
+    expect(link).toHaveAttribute('href', '/transactions');
+    await user.hover(link);
+    expect(router.state.location.pathname).toBe('/wallet');
+    await user.click(link);
+    await waitFor(() => expect(router.state.location.pathname).toBe('/transactions'));
+    if (width <= 700) {
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      await user.click(screen.getByRole('button', { name: 'Open menu' }));
+    }
+    expect(await screen.findByRole('link', { name: 'Transactions' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+    expect(screen.getByRole('link', { name: 'Wallet' })).not.toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+  });
+
   it.each([390, 1200])('opens Top up and marks it active at width %s', async (width) => {
     viewportWidth = width;
     const router = await renderLayout(() => (
@@ -156,10 +186,10 @@ describe('application navigation', () => {
       'href',
       '/deposit',
     );
-    for (const name of [/Transactions/]) {
-      expect(within(dialog).queryByRole('button', { name })).not.toBeInTheDocument();
-      expect(within(dialog).queryByRole('link', { name })).not.toBeInTheDocument();
-    }
+    expect(within(dialog).getByRole('link', { name: 'Transactions' })).toHaveAttribute(
+      'href',
+      '/transactions',
+    );
     await user.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     await waitFor(() => expect(trigger).toHaveFocus());

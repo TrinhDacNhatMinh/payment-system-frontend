@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import {
   EyeInvisibleOutlined,
   EyeOutlined,
+  HistoryOutlined,
   PlusCircleOutlined,
   SwapOutlined,
 } from '@ant-design/icons';
@@ -148,6 +149,9 @@ function WalletContent({
           </Link>
           <Link to="/deposit" preload={false} className="wallet-transfer-link">
             <PlusCircleOutlined aria-hidden="true" /> Top up
+          </Link>
+          <Link to="/transactions" preload={false} className="wallet-transfer-link">
+            <HistoryOutlined aria-hidden="true" /> Transaction history
           </Link>
         </div>
       </div>
