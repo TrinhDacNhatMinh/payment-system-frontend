@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { ApiError } from '@/shared/api/api-error';
+import { idempotencyKeySchema } from '@/shared/api/idempotency-key';
 import { apiIdSchema, vietnamDateTimeSchema } from '@/shared/api/scalar-schemas';
 import {
   isVndDecimal,
@@ -18,10 +19,7 @@ const storedAmountSchema = z
   .string()
   .refine((value) => isVndDecimal(value) && parseVndMinorUnits(value) >= MIN_TRANSFER_MINOR_UNITS);
 
-export const idempotencyKeySchema = z
-  .string()
-  .regex(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)
-  .transform((value) => value.toLowerCase());
+export { idempotencyKeySchema };
 
 export const transferAmountSchema = z
   .string()

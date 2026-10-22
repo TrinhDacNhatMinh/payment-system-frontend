@@ -16,12 +16,17 @@ describe('HTTP client isolation', () => {
     },
     {
       method: 'POST',
+      path: '/api/v1/payment/orders',
+      idempotencyKey: '550e8400-e29b-41d4-a716-446655440000',
+    },
+    {
+      method: 'GET',
       path: '/api/v1/payment/deposit',
       idempotencyKey: '550e8400-e29b-41d4-a716-446655440000',
     },
     { method: 'POST', path: '/api/v1/transfer', idempotencyKey: 'bad\r\nAuthorization: secret' },
   ] as const)(
-    'restricts idempotency headers to valid transfer submissions: $method $path',
+    'restricts idempotency headers to supported money submissions: $method $path',
     async (request) => {
       const adapter = createApiAdapter([]);
       const { business } = createHttpClients({ baseUrl, getAccessToken: () => 'access', adapter });

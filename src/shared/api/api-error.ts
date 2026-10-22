@@ -20,15 +20,22 @@ const codeMessages: Record<string, string> = {
   SELF_TRANSFER_NOT_ALLOWED: 'You cannot transfer money to yourself.',
   RECIPIENT_NOT_FOUND: 'The recipient could not be found. Check the email address.',
   RECIPIENT_LOCKED: 'The recipient account is locked and cannot receive this transfer.',
-  AMOUNT_OUT_OF_RANGE: 'Check the transfer amount and allowed limits.',
+  AMOUNT_OUT_OF_RANGE: 'Check the amount and allowed limits.',
   LEGACY_FRACTIONAL_MONEY:
     'A historical fractional amount requires reconciliation. Contact support before continuing.',
   CONCURRENT_MODIFICATION: 'The wallet changed during processing. Check the transfer status.',
-  IDEMPOTENCY_KEY_INVALID: 'The transfer key is invalid. No new transfer should be submitted.',
+  IDEMPOTENCY_KEY_INVALID:
+    'This request could not be verified. Check its status before trying again.',
   IDEMPOTENCY_KEY_REUSED: 'This transfer key belongs to different transfer details.',
   TRANSFER_IN_PROGRESS: 'This transfer is being processed. Check its status before continuing.',
   TRANSFER_REQUEST_NOT_FOUND:
     'The request is not visible yet. This does not confirm that the transfer failed.',
+  DEPOSIT_KEY_REUSED:
+    'This top-up request has different details. Check its status before continuing.',
+  DEPOSIT_REQUEST_IN_PROGRESS: 'Your top-up request is being prepared. Check its status shortly.',
+  DEPOSIT_REQUEST_NOT_FOUND:
+    'The top-up request is not visible yet. This does not confirm that it failed.',
+  PAYMENT_ORDER_NOT_FOUND: 'This top-up is unavailable or cannot be accessed with this account.',
   INVALID_CREDENTIALS: 'Email or password is incorrect.',
   EMAIL_ALREADY_EXISTS: 'An account with this email already exists. Sign in instead.',
   ACCOUNT_LOCKED: 'Your account is locked. You cannot access your wallet at this time.',
