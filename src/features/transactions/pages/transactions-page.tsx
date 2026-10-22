@@ -12,10 +12,12 @@ import { PageHeading } from '@/shared/ui/page-heading';
 import { transactionQueryOptions } from '../api/transaction-query';
 import { TransactionHistory } from '../ui/transaction-history';
 import { TransactionFilters } from '../ui/transaction-filters';
+import { TransactionPagination } from '../ui/transaction-pagination';
 import {
   appliedTransactionFilters,
   transactionFilterDraft,
   transactionSearchFromDraft,
+  transactionPageSearch,
   type TransactionFilterDraft,
   type TransactionSearch,
 } from '../model/transaction-search';
@@ -50,7 +52,13 @@ export function TransactionsPage() {
       access={access}
       api={session.privateApi(access)}
       search={search}
-      apply={(draft) => navigate({ search: transactionSearchFromDraft(draft, search.size ?? 10) })}
+      apply={(draft) => navigate({ search: transactionSearchFromDraft(draft) })}
+      changePage={(page, replace = false) =>
+        navigate({
+          search: transactionPageSearch(search, page),
+          replace,
+        })
+      }
     />
   );
 }
@@ -61,12 +69,14 @@ function TransactionsContent({
   api,
   search,
   apply,
+  changePage,
 }: {
   session: SessionController;
   access: SessionAccess;
   api: ApiTransport;
   search: TransactionSearch;
   apply: (value: TransactionFilterDraft) => Promise<void>;
+  changePage: (page: number, replace?: boolean) => Promise<void>;
 }) {
   const query = useQuery(
     transactionQueryOptions({
@@ -80,6 +90,8 @@ function TransactionsContent({
   const error = query.error ? normalizeApiError(query.error) : null;
   const unavailable = error?.code === 'WALLET_NOT_FOUND';
   const accessRejected = error?.status === 401 || error?.status === 403;
+  const page = search.page ?? 1;
+  const outOfRange = query.isSuccess && page > Math.max(1, query.data.totalPages);
   const retry = () => {
     if (!query.isFetching) void query.refetch({ cancelRefetch: false });
   };
@@ -118,7 +130,16 @@ function TransactionsContent({
       ) : (
         <section aria-label="Transaction history" aria-busy={query.isFetching}>
           {query.isFetching && <p role="status">Updating transactions…</p>}
-          {query.data.content.length === 0 ? (
+          {outOfRange ? (
+            <ContentState
+              kind="empty"
+              title="Page unavailable"
+              description="This page no longer has transactions. Return to the first page."
+              action={
+                <Button onClick={() => void changePage(1, true)}>Go to first page</Button>
+              }
+            />
+          ) : query.data.content.length === 0 ? (
             <ContentState
               kind="empty"
               title={
@@ -144,6 +165,14 @@ function TransactionsContent({
               </p>
               <TransactionHistory transactions={query.data.content} />
             </div>
+          )}
+          {!outOfRange && (
+            <TransactionPagination
+              page={page}
+              total={query.data.totalElements}
+              busy={query.isFetching}
+              change={changePage}
+            />
           )}
         </section>
       )}

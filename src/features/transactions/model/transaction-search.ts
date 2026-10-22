@@ -6,6 +6,8 @@ import {
   type TransactionFilters,
 } from '../api/transaction-schemas';
 
+export const TRANSACTIONS_PAGE_SIZE = 10;
+
 const optionalDate = z
   .string()
   .refine((value) => value === '' || z.iso.date().safeParse(value).success, {
@@ -38,7 +40,6 @@ export type TransactionSearch = {
   fromDate?: string;
   toDate?: string;
   page?: number;
-  size?: number;
   invalid?: true;
 };
 
@@ -59,7 +60,6 @@ const searchSchema = z
     fromDate: z.iso.date().optional(),
     toDate: z.iso.date().optional(),
     page: searchInteger.pipe(z.number().max(2_147_483_648)).optional(),
-    size: searchInteger.refine((value) => [10, 20, 50].includes(value)).optional(),
   })
   .refine(({ fromDate, toDate }) => !fromDate || !toDate || fromDate <= toDate);
 
@@ -68,11 +68,10 @@ const searchSchema = z
 export function parseTransactionSearch(value: unknown): TransactionSearch {
   const result = searchSchema.safeParse(value);
   if (!result.success) return { invalid: true };
-  const { page, size, ...filters } = result.data;
+  const { page, ...filters } = result.data;
   return {
     ...filters,
     ...(page && page !== 1 ? { page } : {}),
-    ...(size && size !== 10 ? { size } : {}),
   };
 }
 
@@ -95,17 +94,26 @@ export function appliedTransactionFilters(search: TransactionSearch): Transactio
     // rounding nanoseconds on the server could include the next day.
     toDate: search.toDate ? `${search.toDate}T23:59:59.999999` : undefined,
     page: (search.page ?? 1) - 1,
-    size: search.size ?? 10,
+    size: TRANSACTIONS_PAGE_SIZE,
   };
 }
 
-export function transactionSearchFromDraft(draft: TransactionFilterDraft, size = 10) {
+export function transactionSearchFromDraft(draft: TransactionFilterDraft) {
   const value = transactionFilterDraftSchema.parse(draft);
   return parseTransactionSearch({
     type: value.type || undefined,
     status: value.status || undefined,
     fromDate: value.fromDate || undefined,
     toDate: value.toDate || undefined,
-    size,
   });
+}
+
+export function transactionPageSearch(search: TransactionSearch, page: number) {
+  if (search.invalid) throw new RangeError('Invalid transaction search.');
+  const next = parseTransactionSearch({
+    ...search,
+    page,
+  });
+  if (next.invalid) throw new RangeError('Invalid transaction page.');
+  return next;
 }

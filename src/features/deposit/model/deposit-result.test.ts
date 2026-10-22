@@ -39,6 +39,7 @@ async function setup(options: { visible?: boolean; online?: boolean; configured?
     pendingOrder(),
   );
   const refreshWallet = vi.fn(async () => undefined);
+  const invalidateHistory = vi.fn(async () => undefined);
   const openPayment = vi.fn<(url: string) => void>();
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] });
   const operation = createDepositResult({
@@ -48,12 +49,22 @@ async function setup(options: { visible?: boolean; online?: boolean; configured?
     readOrder,
     markers,
     refreshWallet,
+    invalidateHistory,
     openPayment,
     gateway: options.configured === false ? null : depositGatewayConfig,
   });
   stops.push(operation.stop);
   operation.start(options.visible ?? true, options.online ?? true);
-  return { ...fixture, operation, readOrder, refreshWallet, openPayment, markers, storage };
+  return {
+    ...fixture,
+    operation,
+    readOrder,
+    refreshWallet,
+    invalidateHistory,
+    openPayment,
+    markers,
+    storage,
+  };
 }
 
 afterEach(async () => {
@@ -63,6 +74,36 @@ afterEach(async () => {
 });
 
 describe('order result polling and continuation', () => {
+  it('keeps a confirmed top-up when history invalidation fails and still refreshes the wallet', async () => {
+    const f = await setup();
+    f.invalidateHistory.mockRejectedValueOnce(new Error('History unavailable'));
+    f.readOrder.mockResolvedValueOnce({
+      ...pendingOrder(),
+      status: 'SUCCESS',
+      canContinuePayment: false,
+      paymentUrl: null,
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(f.invalidateHistory).toHaveBeenCalledTimes(1);
+    expect(f.refreshWallet).toHaveBeenCalledTimes(1);
+    expect(f.operation.getSnapshot()).toMatchObject({ status: 'success', wallet: 'ready' });
+  });
+
+  it('does not invalidate history for a pending or failed order', async () => {
+    const f = await setup();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(f.invalidateHistory).not.toHaveBeenCalled();
+    f.readOrder.mockResolvedValueOnce({
+      ...pendingOrder(),
+      status: 'FAILED',
+      canContinuePayment: false,
+      paymentUrl: null,
+    });
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(f.operation.getSnapshot().status).toBe('failed');
+    expect(f.invalidateHistory).not.toHaveBeenCalled();
+  });
+
   it('allows a new top-up after a pending order is known without overwriting a newer request', async () => {
     const f = await setup();
     await vi.advanceTimersByTimeAsync(0);

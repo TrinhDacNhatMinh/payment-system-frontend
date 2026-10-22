@@ -56,6 +56,7 @@ async function setup(stored: string | null = null) {
     })),
   };
   const refreshWallet = vi.fn(async () => undefined);
+  const invalidateHistory = vi.fn(async () => undefined);
   const newKey = vi.fn<() => string>(() => key);
   const operation = createTransferSubmission({
     session: fixture.controller,
@@ -63,11 +64,22 @@ async function setup(stored: string | null = null) {
     api,
     markers,
     refreshWallet,
+    invalidateHistory,
     newKey,
   });
   cleanup.push(operation.stop);
   operation.start();
-  return { ...fixture, access, storage, markers, api, refreshWallet, newKey, operation };
+  return {
+    ...fixture,
+    access,
+    storage,
+    markers,
+    api,
+    refreshWallet,
+    invalidateHistory,
+    newKey,
+    operation,
+  };
 }
 
 afterEach(async () => {
@@ -79,6 +91,37 @@ afterEach(async () => {
 });
 
 describe('confirmed transfer submission', () => {
+  it('does not invalidate history when a transfer is rejected', async () => {
+    const fixture = await setup();
+    fixture.api.submit.mockRejectedValueOnce(
+      new ApiError('business', { code: 'VALIDATION_ERROR', status: 400 }),
+    );
+    await fixture.operation.submit(payload);
+    expect(fixture.operation.getSnapshot().status).toBe('rejected');
+    expect(fixture.invalidateHistory).not.toHaveBeenCalled();
+  });
+
+  it('invalidates history on confirmed success even if the wallet refresh fails', async () => {
+    const fixture = await setup();
+    fixture.refreshWallet.mockRejectedValueOnce(new Error('Wallet read failed'));
+    await fixture.operation.submit(payload);
+    expect(fixture.invalidateHistory).toHaveBeenCalledTimes(1);
+    expect(fixture.operation.getSnapshot()).toMatchObject({
+      status: 'success',
+      walletRefresh: 'error',
+    });
+  });
+
+  it('keeps a confirmed receipt if history invalidation fails', async () => {
+    const fixture = await setup();
+    fixture.invalidateHistory.mockRejectedValueOnce(new Error('History unavailable'));
+    await fixture.operation.submit(payload);
+    expect(fixture.operation.getSnapshot()).toMatchObject({
+      status: 'success',
+      walletRefresh: 'ready',
+    });
+  });
+
   it('reviews a stored PENDING payload before resuming with exactly the same key and details', async () => {
     const fixture = await setup(JSON.stringify({ userId: 1, idempotencyKey: key }));
     await fixture.operation.checkStatus();

@@ -80,6 +80,67 @@ function renderTransactions(
 }
 
 describe('transactions private page', () => {
+  it('pages server records in fixed groups of ten and preserves filters', async () => {
+    const records = Array.from({ length: 12 }, (_, index) => ({
+      ...transactionPage.content[0],
+      id: index + 1,
+    }));
+    const fixture = renderTransactions(
+      [
+        csrfReply(),
+        successReply(testSession),
+        successReply({
+          ...transactionPage,
+          content: records.slice(0, 10),
+          totalElements: 12,
+          totalPages: 2,
+        }),
+        successReply({
+          ...transactionPage,
+          page: 1,
+          content: records.slice(10),
+          totalElements: 12,
+          totalPages: 2,
+        }),
+      ],
+      {},
+      '/transactions?status=SUCCESS',
+    );
+    await screen.findByText('12 transactions');
+    await userEvent.setup().click(screen.getByTitle('Next Page'));
+    await waitFor(() =>
+      expect(fixture.router.state.location.search).toEqual({ status: 'SUCCESS', page: 2 }),
+    );
+    await waitFor(() => expect(fixture.adapter).toHaveBeenCalledTimes(4));
+    expect(fixture.adapter.mock.calls[3]?.[0].params).toMatchObject({
+      status: 'SUCCESS',
+      page: 1,
+      size: 10,
+    });
+    await screen.findByText('12 transactions');
+    expect(screen.queryByRole('combobox', { name: 'Rows per page' })).not.toBeInTheDocument();
+  });
+
+  it('does not loop on an out-of-range page and offers a bounded reset preserving filters', async () => {
+    const fixture = renderTransactions(
+      [
+        csrfReply(),
+        successReply(testSession),
+        successReply({ ...transactionPage, page: 98, content: [] }),
+        successReply(transactionPage),
+      ],
+      {},
+      '/transactions?status=SUCCESS&page=99',
+    );
+    await screen.findByRole('heading', { name: 'Page unavailable' });
+    expect(fixture.adapter).toHaveBeenCalledTimes(3);
+    expect(fixture.router.state.location.search.page).toBe(99);
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Go to first page' }));
+    await screen.findByText('1 transaction');
+    expect(fixture.router.state.location.search).toEqual({ status: 'SUCCESS' });
+    expect(fixture.adapter).toHaveBeenCalledTimes(4);
+  });
+
   it('restores URL filters and blocks invalid search until reset without a history request', async () => {
     const fixture = renderTransactions(
       [csrfReply(), successReply(testSession), successReply(transactionPage)],
@@ -98,12 +159,12 @@ describe('transactions private page', () => {
     const initial = {
       ...transactionPage,
       page: 2,
-      size: 20,
+      size: 10,
       content: [],
       totalElements: 0,
       totalPages: 0,
     };
-    const applied = { ...transactionPage, size: 20 };
+    const applied = transactionPage;
     const fixture = renderTransactions(
       [
         csrfReply(),
@@ -117,14 +178,14 @@ describe('transactions private page', () => {
       {},
       '/transactions?type=TRANSFER_OUT&status=SUCCESS&fromDate=2026-10-20&toDate=2026-10-22&page=3&size=20',
     );
-    await screen.findByRole('heading', { name: 'No matching transactions' });
+    await screen.findByRole('heading', { name: 'Page unavailable' });
     expect(fixture.adapter.mock.calls[2]?.[0].params).toEqual({
       type: 'TRANSFER_OUT',
       status: 'SUCCESS',
       fromDate: '2026-10-20T00:00:00',
       toDate: '2026-10-22T23:59:59.999999',
       page: 2,
-      size: 20,
+      size: 10,
     });
     fireEvent.change(screen.getByLabelText('From date'), { target: { value: '2026-10-21' } });
     expect(fixture.adapter).toHaveBeenCalledTimes(3);
@@ -135,17 +196,16 @@ describe('transactions private page', () => {
       status: 'SUCCESS',
       fromDate: '2026-10-21',
       toDate: '2026-10-22',
-      size: 20,
     });
     expect(fixture.adapter.mock.calls[3]?.[0].params).toMatchObject({
       fromDate: '2026-10-21T00:00:00',
       page: 0,
-      size: 20,
+      size: 10,
     });
     await act(async () => {
       fixture.router.history.back();
     });
-    await screen.findByRole('heading', { name: 'No matching transactions' });
+    await screen.findByRole('heading', { name: 'Page unavailable' });
     expect(screen.getByLabelText('From date')).toHaveValue('2026-10-20');
     await act(async () => {
       fixture.router.history.forward();
@@ -153,9 +213,9 @@ describe('transactions private page', () => {
     await screen.findByText('1 transaction');
     expect(screen.getByLabelText('From date')).toHaveValue('2026-10-21');
     await userEvent.setup().click(screen.getByRole('button', { name: 'Reset' }));
-    await waitFor(() => expect(fixture.router.state.location.search).toEqual({ size: 20 }));
+    await waitFor(() => expect(fixture.router.state.location.search).toEqual({}));
     await waitFor(() => expect(fixture.adapter).toHaveBeenCalledTimes(7));
-    expect(fixture.adapter.mock.calls[6]?.[0].params).toEqual({ page: 0, size: 20 });
+    expect(fixture.adapter.mock.calls[6]?.[0].params).toEqual({ page: 0, size: 10 });
   });
 
   it('keeps /transactions signed out and never preloads private history', async () => {

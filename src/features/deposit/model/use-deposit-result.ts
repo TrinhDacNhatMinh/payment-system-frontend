@@ -9,6 +9,7 @@ import {
 } from '@/features/auth/model/session-access';
 import type { SessionController } from '@/features/auth/model/session-controller';
 import { walletQueryOptions } from '@/features/wallet/api/wallet-query';
+import { invalidateTransactionHistory } from '@/features/transactions/api/transaction-invalidation';
 import { ApiError } from '@/shared/api/api-error';
 import { createDepositOrderReader } from '../api/deposit-api';
 import { depositOrderQueryOptions } from '../api/deposit-query';
@@ -34,6 +35,7 @@ export function useDepositResult(options: {
       orderId,
       gateway,
       markers: createDepositMarkerStore(),
+      invalidateHistory: () => invalidateTransactionHistory({ client, session, access }),
       readOrder: async (id, signal) => {
         if (signal.aborted) throw new ApiError('cancelled');
         const query = depositOrderQueryOptions(reader, access, id);

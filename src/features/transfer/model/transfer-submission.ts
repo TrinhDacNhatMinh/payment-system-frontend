@@ -51,6 +51,7 @@ export function createTransferSubmission(dependencies: {
   api: ReturnType<typeof createTransferApi>;
   markers: TransferMarkerStore;
   refreshWallet: () => Promise<void>;
+  invalidateHistory?: () => Promise<void>;
   newKey?: () => string;
 }) {
   const { session, access, api, markers, refreshWallet } = dependencies;
@@ -111,6 +112,12 @@ export function createTransferSubmission(dependencies: {
       legacyFractional: historicalFraction,
     });
     let walletRefresh: 'ready' | 'error' = 'ready';
+    try {
+      await dependencies.invalidateHistory?.();
+    } catch {
+      // History refresh cannot change a confirmed transfer outcome.
+    }
+    if (!current(version)) return;
     try {
       await refreshWallet();
     } catch {

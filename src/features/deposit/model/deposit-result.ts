@@ -40,6 +40,7 @@ export function createDepositResult(deps: {
   readOrder: (id: string, signal: AbortSignal) => Promise<DepositOrder>;
   markers: DepositMarkerStore;
   refreshWallet: () => Promise<void>;
+  invalidateHistory?: () => Promise<void>;
   gateway: DepositGatewayConfig | null;
   openPayment: (url: string) => void;
   now?: () => number;
@@ -158,6 +159,11 @@ export function createDepositResult(deps: {
           wallet: 'updating',
           canStartNew: clearKnownOrderMarker(order),
         });
+        try {
+          await deps.invalidateHistory?.();
+        } catch {
+          // History refresh cannot change a confirmed payment outcome.
+        }
         await updateWallet(version);
       } else if (order.status === 'FAILED') {
         stopAutomatic();

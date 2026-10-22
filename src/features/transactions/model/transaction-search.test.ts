@@ -7,9 +7,22 @@ import {
   transactionFilterDraft,
   transactionFilterDraftSchema,
   transactionSearchFromDraft,
+  transactionPageSearch,
 } from './transaction-search';
 
 describe('transaction filter URL contract', () => {
+  it('changes page without dropping filters', () => {
+    const search = {
+      type: 'DEPOSIT' as const,
+      status: 'SUCCESS' as const,
+      page: 3,
+      toDate: '2026-10-22',
+    };
+    expect(transactionPageSearch(search, 4)).toEqual({ ...search, page: 4 });
+    expect(transactionPageSearch({ page: 2 }, 1)).toEqual({});
+    expect(() => transactionPageSearch(search, -1)).toThrow();
+  });
+
   it('normalizes defaults and excludes unknown owner, sort and redirect selectors', () => {
     expect(
       parseTransactionSearch({ page: '1', size: 10, userId: 99, sort: 'id', next: '/admin' }),
@@ -33,7 +46,7 @@ describe('transaction filter URL contract', () => {
       fromDate: '2026-10-22T00:00:00',
       toDate: '2026-10-22T23:59:59.999999',
       page: 2,
-      size: 20,
+      size: 10,
     });
     expect(transactionFilterDraft(search)).toEqual({
       type: 'TRANSFER_IN',
@@ -51,8 +64,6 @@ describe('transaction filter URL contract', () => {
     { page: 1.5 },
     { page: '2e2' },
     { page: 2_147_483_649 },
-    { size: 100 },
-    { size: 0 },
     { fromDate: '2026-02-30' },
     { fromDate: ['2026-10-22'] },
     { toDate: '2026-10-22T23:59:59' },
@@ -78,14 +89,20 @@ describe('transaction filter URL contract', () => {
     });
   });
 
-  it('applies or resets at the first page while retaining the selected page size', () => {
+  it('ignores URL size and always requests ten rows', () => {
+    for (const size of [20, 50, 100, 0, 'invalid']) {
+      const search = parseTransactionSearch({ page: 2, size });
+      expect(search).toEqual({ page: 2 });
+      expect(appliedTransactionFilters(search).size).toBe(10);
+    }
+  });
+
+  it('applies or resets at the first page', () => {
     expect(
-      transactionSearchFromDraft({ ...EMPTY_TRANSACTION_FILTERS, type: 'DEPOSIT' }, 20),
+      transactionSearchFromDraft({ ...EMPTY_TRANSACTION_FILTERS, type: 'DEPOSIT' }),
     ).toEqual({
       type: 'DEPOSIT',
-      size: 20,
     });
-    expect(transactionSearchFromDraft(EMPTY_TRANSACTION_FILTERS, 20)).toEqual({ size: 20 });
     expect(transactionSearchFromDraft(EMPTY_TRANSACTION_FILTERS)).toEqual({});
     expect(
       transactionFilterDraftSchema.safeParse({

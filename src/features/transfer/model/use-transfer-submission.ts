@@ -9,6 +9,7 @@ import {
 } from '@/features/auth/model/session-access';
 import type { SessionController } from '@/features/auth/model/session-controller';
 import { walletQueryOptions } from '@/features/wallet/api/wallet-query';
+import { invalidateTransactionHistory } from '@/features/transactions/api/transaction-invalidation';
 import { createTransferApi } from '../api/transfer-api';
 import type { TransferReview } from './transfer-draft';
 import { createTransferMarkerStore } from './transfer-marker';
@@ -46,6 +47,8 @@ export function useTransferSubmission(options: {
         getRequest: api.getRequest,
       },
       markers: createTransferMarkerStore(),
+      invalidateHistory: () =>
+        invalidateTransactionHistory({ client: queryClient, session, access }),
       refreshWallet: async () => {
         const check = () => {
           if (!sameAccess(session.getAccessIdentity(), access)) throw new SessionAccessError();
