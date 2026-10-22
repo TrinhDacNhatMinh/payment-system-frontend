@@ -98,9 +98,7 @@ describe('transaction filter URL contract', () => {
   });
 
   it('applies or resets at the first page', () => {
-    expect(
-      transactionSearchFromDraft({ ...EMPTY_TRANSACTION_FILTERS, type: 'DEPOSIT' }),
-    ).toEqual({
+    expect(transactionSearchFromDraft({ ...EMPTY_TRANSACTION_FILTERS, type: 'DEPOSIT' })).toEqual({
       type: 'DEPOSIT',
     });
     expect(transactionSearchFromDraft(EMPTY_TRANSACTION_FILTERS)).toEqual({});

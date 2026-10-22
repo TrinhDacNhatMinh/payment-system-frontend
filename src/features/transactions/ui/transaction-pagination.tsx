@@ -26,7 +26,11 @@ export function TransactionPagination({
         showSizeChanger={false}
         disabled={busy}
         onChange={(next) => {
-          if (Number.isInteger(next) && next >= 1 && next <= Math.max(1, Math.ceil(total / TRANSACTIONS_PAGE_SIZE))) {
+          if (
+            Number.isInteger(next) &&
+            next >= 1 &&
+            next <= Math.max(1, Math.ceil(total / TRANSACTIONS_PAGE_SIZE))
+          ) {
             void change(next);
           }
         }}

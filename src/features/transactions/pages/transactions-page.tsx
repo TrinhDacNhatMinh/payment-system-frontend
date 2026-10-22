@@ -135,9 +135,7 @@ function TransactionsContent({
               kind="empty"
               title="Page unavailable"
               description="This page no longer has transactions. Return to the first page."
-              action={
-                <Button onClick={() => void changePage(1, true)}>Go to first page</Button>
-              }
+              action={<Button onClick={() => void changePage(1, true)}>Go to first page</Button>}
             />
           ) : query.data.content.length === 0 ? (
             <ContentState
