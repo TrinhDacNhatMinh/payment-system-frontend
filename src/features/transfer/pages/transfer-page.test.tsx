@@ -522,7 +522,7 @@ describe('transfer entry and review', () => {
     expect(balance.compareDocumentPosition(email) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.queryByRole('list', { name: 'Transfer progress' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled();
-    await userEvent.setup().click(screen.getByRole('link', { name: 'Go back' }));
+    await userEvent.setup().click(screen.getByRole('link', { name: 'Back to wallet' }));
     await screen.findByRole('heading', { name: 'Wallet destination' });
     expect(fixture.router.state.location.pathname).toBe('/wallet');
     expect(fixture.adapter.mock.calls.map(([config]) => config.url)).toEqual([

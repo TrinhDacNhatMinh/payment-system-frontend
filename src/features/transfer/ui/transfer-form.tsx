@@ -243,7 +243,7 @@ export function TransferForm({
             ))}
             <div className="transfer-actions transfer-entry-actions">
               <Link to="/wallet" preload={false} className="transfer-back-action">
-                Go back
+                Back to wallet
               </Link>
               <Button
                 type="primary"

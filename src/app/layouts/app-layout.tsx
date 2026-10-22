@@ -1,4 +1,4 @@
-import { useRef, useState, type PropsWithChildren } from 'react';
+import { useEffect, useRef, useState, type PropsWithChildren } from 'react';
 import { CloseOutlined, LogoutOutlined, MenuOutlined } from '@ant-design/icons';
 import { useLocation } from '@tanstack/react-router';
 import { Button, Drawer, Modal } from 'antd';
@@ -31,6 +31,24 @@ export function AppLayout({ account, onSignOut, signingOut = false, children }: 
     signOutPrompt.locationKey === locationKey &&
     !!onSignOut &&
     !signingOut;
+
+  useEffect(() => {
+    const root = document.documentElement;
+    let hideTimer: ReturnType<typeof setTimeout> | undefined;
+    const showScrollbar = () => {
+      root.dataset.scrolling = 'true';
+      clearTimeout(hideTimer);
+      hideTimer = setTimeout(() => {
+        delete root.dataset.scrolling;
+      }, 800);
+    };
+    window.addEventListener('scroll', showScrollbar, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', showScrollbar);
+      clearTimeout(hideTimer);
+      delete root.dataset.scrolling;
+    };
+  }, []);
 
   if (signOutPrompt !== null && !confirmationOpen) {
     setSignOutPrompt(null);

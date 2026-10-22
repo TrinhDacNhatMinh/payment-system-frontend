@@ -4,12 +4,26 @@
 
 /* Ant Design owns its controls. Tailwind Preflight is intentionally omitted. */
 html {
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
   color-scheme: light;
   background: var(--app-canvas);
   color: var(--app-text);
   font-family: var(--app-fontFamily);
   font-size: 14px;
   line-height: 1.5;
+}
+
+html[data-scrolling='true'] {
+  scrollbar-color: var(--app-textSecondary) transparent;
+}
+
+@media (forced-colors: active) {
+  html,
+  html[data-scrolling='true'] {
+    scrollbar-color: auto;
+  }
 }
 
 body {
@@ -179,6 +193,9 @@ body {
   --sidebar-width: 240px;
 }
 .app-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
   box-sizing: border-box;
   min-height: var(--header-height);
   padding: 16px 32px;
@@ -195,6 +212,12 @@ body {
   min-height: calc(100dvh - var(--header-height));
 }
 .app-sidebar {
+  position: sticky;
+  top: var(--header-height);
+  align-self: start;
+  box-sizing: border-box;
+  height: calc(100dvh - var(--header-height));
+  overflow-y: auto;
   padding: 28px 16px;
   border-right: 1px solid var(--app-border);
   background: var(--app-surface);
@@ -319,10 +342,20 @@ body {
   gap: 24px;
 }
 .wallet-actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-start;
+  display: grid;
+  grid-template-columns: repeat(3, 25%);
+  align-items: stretch;
   gap: 12px;
+}
+.wallet-actions .wallet-transfer-link {
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 88px;
+  padding: 12px 8px;
+  justify-self: stretch;
+  flex-direction: column;
+  text-align: center;
+  overflow-wrap: anywhere;
 }
 .deposit-method {
   margin-bottom: 24px;
