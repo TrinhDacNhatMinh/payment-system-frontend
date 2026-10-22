@@ -52,10 +52,22 @@ describe('top-up form and preview', () => {
     expect(input).toHaveAttribute('aria-invalid', 'false');
   });
 
+  it.each(['', '9999', '50000001', '9007199254740993'])(
+    'rejects invalid raw input %j without rounding or opening a preview',
+    async (amount) => {
+      renderForm();
+      const input = await screen.findByLabelText(/^Amount/);
+      fireEvent.change(input, { target: { value: amount } });
+      await userEvent.setup().click(screen.getByRole('button', { name: 'Continue' }));
+      await screen.findByText(AMOUNT_ERROR);
+      await waitFor(() => expect(input).toHaveFocus());
+      expect(input).toHaveValue(amount);
+      expect(input).toHaveAttribute('aria-invalid', 'true');
+      expect(screen.queryByRole('heading', { name: 'Review top-up' })).not.toBeInTheDocument();
+    },
+  );
+
   it.each([
-    '',
-    '9999',
-    '50000001',
     '10000.50',
     '10000.00',
     '-10000',
@@ -65,16 +77,14 @@ describe('top-up form and preview', () => {
     '10.000',
     ' 10000 ',
     'abc',
-    '9007199254740993',
-  ])('rejects invalid raw input %j without rounding or opening a preview', async (amount) => {
+  ])('keeps the previous amount when non-digit input %j is pasted', async (amount) => {
     renderForm();
     const input = await screen.findByLabelText(/^Amount/);
-    fireEvent.change(input, { target: { value: amount } });
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Continue' }));
-    await screen.findByText(AMOUNT_ERROR);
-    await waitFor(() => expect(input).toHaveFocus());
-    expect(input).toHaveValue(amount);
-    expect(input).toHaveAttribute('aria-invalid', 'true');
+    fireEvent.change(input, { target: { value: '20000' } });
+    const user = userEvent.setup();
+    await user.click(input);
+    await user.paste(amount);
+    expect(input).toHaveValue('20000');
     expect(screen.queryByRole('heading', { name: 'Review top-up' })).not.toBeInTheDocument();
   });
 

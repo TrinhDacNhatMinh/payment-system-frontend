@@ -19,6 +19,7 @@ import { createApiAdapter, errorReply, successReply, type ApiReply } from '@/tes
 import { createSessionFixture, csrfReply, testSession } from '@/test/auth-session';
 import { createTransferMarkerStore, TRANSFER_MARKER_KEY } from '../model/transfer-marker';
 import { TransferPage } from './transfer-page';
+import { RECIPIENT_LOOKUP_PATH } from '../api/recipient-api';
 
 const controllers: SessionController[] = [];
 const clients: QueryClient[] = [];
@@ -43,8 +44,13 @@ function renderTransfer(
     balanceReply,
     ...replies,
   ]);
+  const transport = wrapAdapter?.(adapter) ?? adapter;
   const fixture = createSessionFixture([], {
-    adapter: wrapAdapter?.(adapter) ?? adapter,
+    // Recipient reads are independent from the ordered money/wallet replies.
+    adapter: async (config) =>
+      config.url === RECIPIENT_LOOKUP_PATH
+        ? { ...successReply({ exists: true }), statusText: '', headers: {}, config }
+        : transport(config),
     clearPrivateData: () => {
       void client.cancelQueries();
       client.clear();
@@ -608,7 +614,7 @@ describe('transfer entry and review', () => {
   });
 
   it('reviews exact values, preserves the draft on edit and requires reviewing changes again', async () => {
-    const fixture = renderTransfer();
+    const fixture = renderTransfer([], successReply({ ...wallet, balance: 50000000 }));
     await screen.findByRole('form', { name: 'Transfer details' });
     const user = userEvent.setup();
     const description = '  lunch\n  tomorrow  ';

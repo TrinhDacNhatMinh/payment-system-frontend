@@ -25,3 +25,18 @@ export function getTransferFieldError(name: TransferFieldName, value: string | n
 export function createTransferReview(draft: TransferDraft): TransferReview {
   return transferRequestSchema.parse(draft);
 }
+
+export function getTransferBalanceError(value: string | null, balance?: number) {
+  if (
+    !value ||
+    !/^\d+$/.test(value) ||
+    balance === undefined ||
+    !Number.isSafeInteger(balance) ||
+    balance < 0
+  )
+    return undefined;
+  const whole = value.replace(/^0+(?=\d)/, '');
+  return whole.length > 16 || BigInt(whole) > BigInt(balance)
+    ? 'Amount exceeds your available balance.'
+    : undefined;
+}

@@ -153,6 +153,7 @@ describe('protected route and loader integration', () => {
           currency: 'VND',
           updatedAt: '2026-10-21T14:30:00.123456',
         }),
+        successReply({ exists: true }),
       ],
       {
         initial: { version: 1, epoch: '10000000-0000-4000-8000-000000000001', mode: 'signed-out' },
@@ -195,7 +196,7 @@ describe('protected route and loader integration', () => {
     expect(screen.queryByRole('heading', { name: 'Review transfer' })).not.toBeInTheDocument();
     expect(screen.queryByText('private transfer draft')).not.toBeInTheDocument();
     expect(router.state.location.pathname).toBe('/transfer');
-    expect(fixture.adapter).toHaveBeenCalledTimes(3);
+    expect(fixture.adapter).toHaveBeenCalledTimes(4);
   });
 
   it('hides the private page and draft before logout completes and preserves its URL', async () => {

@@ -1,6 +1,8 @@
 import type { ChangeEvent } from 'react';
 import { Input } from 'antd';
 
+import { VndAmountInput } from '@/shared/ui/vnd-amount-input';
+
 import type { TransferFieldName } from '../model/transfer-draft';
 
 type TransferInputProps = {
@@ -11,6 +13,7 @@ type TransferInputProps = {
   disabled: boolean;
   onChange: (value: string) => void;
   onBlur: () => void;
+  checking?: boolean;
 };
 
 const presentation = {
@@ -32,7 +35,6 @@ export function TransferInput(props: TransferInputProps) {
     onBlur: props.onBlur,
     onChange: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
       const value = event.target.value;
-      if (props.name === 'amount' && !/^\d*$/.test(value)) return;
       props.onChange(props.name === 'description' ? value.slice(0, 255) : value);
     },
     required: props.name !== 'description',
@@ -49,18 +51,19 @@ export function TransferInput(props: TransferInputProps) {
       </label>
       {props.name === 'description' ? (
         <Input.TextArea {...control} maxLength={255} autoSize={{ minRows: 3, maxRows: 6 }} />
+      ) : props.name === 'amount' ? (
+        <VndAmountInput {...control} onChange={props.onChange} />
       ) : (
-        <Input
-          {...control}
-          type={props.name === 'toEmail' ? 'email' : 'text'}
-          inputMode={props.name === 'amount' ? 'numeric' : 'email'}
-          autoComplete="off"
-          suffix={props.name === 'amount' ? 'VND' : undefined}
-        />
+        <Input {...control} type="email" inputMode="email" autoComplete="off" />
       )}
       {message && (
         <p id={helpId} className="transfer-field-error">
           {message}
+        </p>
+      )}
+      {props.checking && (
+        <p role="status" className="transfer-field-hint">
+          Checking recipient…
         </p>
       )}
     </div>

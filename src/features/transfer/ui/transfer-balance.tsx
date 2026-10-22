@@ -1,18 +1,14 @@
-import { useQuery } from '@tanstack/react-query';
-
-import type { SessionAccess } from '@/features/auth/model/session-access';
-import type { SessionController } from '@/features/auth/model/session-controller';
-import { walletQueryOptions } from '@/features/wallet/api/wallet-query';
+import type { WalletResponse } from '@/features/wallet/api/wallet-schemas';
 import { formatWalletBalance } from '@/features/wallet/model/wallet-display';
 import { normalizeApiError } from '@/shared/api/api-error';
-import type { ApiTransport } from '@/shared/api/http-client';
 
 export function TransferBalance(props: {
-  session: SessionController;
-  access: SessionAccess;
-  api: ApiTransport;
+  data?: WalletResponse;
+  error: unknown;
+  isPending: boolean;
+  isFetching: boolean;
 }) {
-  const query = useQuery(walletQueryOptions(props));
+  const query = props;
   const error = query.error ? normalizeApiError(query.error) : null;
   const unavailable =
     error?.status === 401 || error?.status === 403 || error?.code === 'WALLET_NOT_FOUND';

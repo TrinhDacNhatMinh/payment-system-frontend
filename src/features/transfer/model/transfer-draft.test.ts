@@ -1,8 +1,20 @@
 import { describe, expect, it } from 'vitest';
 
-import { createTransferReview, getTransferFieldError } from './transfer-draft';
+import {
+  createTransferReview,
+  getTransferFieldError,
+  getTransferBalanceError,
+} from './transfer-draft';
 
 describe('transfer review snapshot', () => {
+  it('checks whole amounts against a known safe balance without rounding or inventing zero', () => {
+    expect(getTransferBalanceError('2001', 2000)).toBe('Amount exceeds your available balance.');
+    expect(getTransferBalanceError('2000', 2000)).toBeUndefined();
+    expect(getTransferBalanceError('1000', 0)).toBeDefined();
+    expect(getTransferBalanceError('1000', undefined)).toBeUndefined();
+    expect(getTransferBalanceError('1000', 1000.5)).toBeUndefined();
+    expect(getTransferBalanceError('1000', Number.MAX_SAFE_INTEGER + 1)).toBeUndefined();
+  });
   it.each([null, '', '  lunch  ', ' '.repeat(255)])(
     'trims only email and preserves description %j',
     (description) => {

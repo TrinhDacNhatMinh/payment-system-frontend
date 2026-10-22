@@ -1,9 +1,10 @@
 import { useId, useLayoutEffect, useRef, useState } from 'react';
 import { useForm, useStore } from '@tanstack/react-form';
 import { Link } from '@tanstack/react-router';
-import { Button, Input } from 'antd';
+import { Button } from 'antd';
 
 import { formatVnd } from '@/shared/lib/vnd';
+import { VndAmountInput } from '@/shared/ui/vnd-amount-input';
 import { depositAmountInputSchema } from '../api/deposit-schemas';
 
 function getAmountError(value: string) {
@@ -109,17 +110,13 @@ export function DepositForm({
                 <label htmlFor={`${id}-amount`}>
                   Amount <span aria-hidden="true">*</span>
                 </label>
-                <Input
-                  ref={(instance) => {
+                <VndAmountInput
+                  inputRef={(instance) => {
                     input.current = instance?.input ?? null;
                   }}
                   id={`${id}-amount`}
                   name="amount"
                   className="transfer-control"
-                  type="text"
-                  inputMode="numeric"
-                  autoComplete="off"
-                  suffix="VND"
                   required
                   value={field.state.value}
                   disabled={isSubmitting}
@@ -127,9 +124,9 @@ export function DepositForm({
                   aria-describedby={error ? `${id}-amount-error` : undefined}
                   status={error ? 'error' : undefined}
                   onBlur={field.handleBlur}
-                  onChange={(event) => {
+                  onChange={(value) => {
                     const hadErrors = field.state.meta.errors.length > 0;
-                    field.handleChange(event.target.value);
+                    field.handleChange(value);
                     if (hadErrors) void field.validate('blur');
                   }}
                 />
